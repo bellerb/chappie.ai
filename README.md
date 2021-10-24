@@ -1,2 +1,2 @@
-# chapie.ai
+# chappie.ai
  
