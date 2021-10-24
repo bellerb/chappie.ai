@@ -45,7 +45,7 @@ class MCTS:
             #Use NN
             enc_state = self.plumbing.encode_state(game)
             v,p = self.Model(enc_state)
-            return v, p
+            return v,p
         else:
             if self.depth == self.max_depth:
                 return self.tree[parent_hash].Q, self.tree[parent_hash].P

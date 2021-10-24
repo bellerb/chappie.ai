@@ -184,27 +184,6 @@ class ChappieZero(nn.Module):
         self.policy = torch.full(policy_size,1.)
         self.Embedding = nn.Embedding(ntoken,embedding_size,padding_idx=padding_idx)
         self.PosEncoder = PositionalEncoding(embedding_size,encoder_dropout)
-        self.LatentMap = CrossAttentionMap(
-            embedding_size,
-            self.latent.size(-1),
-            layer_size=latent_inner,
-            heads=latent_heads,
-            dropout=latent_dropout
-        )
-        self.RewardMap = CrossAttentionMap(
-            embedding_size,
-            self.reward.size(-1),
-            layer_size=reward_inner,
-            heads=reward_heads,
-            dropout=reward_dropout
-        )
-        self.PolicyMap = CrossAttentionMap(
-            embedding_size,
-            self.policy.size(-1),
-            layer_size=policy_inner,
-            heads=policy_heads,
-            dropout=policy_dropout
-        )
         self.Perceiver = Perceiver(
             embedding_size,
             self.latent.size(-1),
@@ -234,12 +213,7 @@ class ChappieZero(nn.Module):
     def forward(self,x):
         x_emb = self.Embedding(x)
         x_emb = self.PosEncoder(x_emb)
-        latent = self.LatentMap(self.latent,x_emb)
-        enc = self.Perceiver(x_emb,latent)
-
-        reward = self.RewardMap(self.reward,x_emb)
-        v = self.RewardNetwork(reward,enc)
-
-        policy = self.PolicyMap(self.policy,x_emb)
-        p = self.PolicyNetwork(policy,enc)
+        enc = self.Perceiver(x_emb,self.latent)
+        v = self.RewardNetwork(self.reward,enc)
+        p = self.PolicyNetwork(self.policy,enc)
         return v,p
