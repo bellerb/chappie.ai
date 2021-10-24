@@ -179,32 +179,35 @@ class ChappieZero(nn.Module):
         policy_dropout=0.5
     ):
         super(ChappieZero, self).__init__()
+        self.latent = torch.full(latent_size,1.)
+        self.reward = torch.full(reward_size,1.)
+        self.policy = torch.full(policy_size,1.)
         self.Embedding = nn.Embedding(ntoken,embedding_size,padding_idx=padding_idx)
         self.PosEncoder = PositionalEncoding(embedding_size,encoder_dropout)
         self.LatentMap = CrossAttentionMap(
             embedding_size,
-            latent_size,
+            self.latent.size(-1),
             layer_size=latent_inner,
             heads=latent_heads,
             dropout=latent_dropout
         )
         self.RewardMap = CrossAttentionMap(
             embedding_size,
-            reward_size,
+            self.reward.size(-1),
             layer_size=reward_inner,
             heads=reward_heads,
             dropout=reward_dropout
         )
         self.PolicyMap = CrossAttentionMap(
             embedding_size,
-            policy_size,
+            self.policy.size(-1),
             layer_size=policy_inner,
             heads=policy_heads,
             dropout=policy_dropout
         )
         self.Perceiver = Perceiver(
             embedding_size,
-            latent_size,
+            self.latent.size(-1),
             recursions=recursions,
             transformer_blocks=transformer_blocks,
             layer_size=perceiver_inner,
@@ -214,29 +217,29 @@ class ChappieZero(nn.Module):
             self_dropout=self_dropout
         )
         self.RewardNetwork = CrossAttentionMap(
-            latent_size,
-            reward_size,
+            self.latent.size(-1),
+            self.reward.size(-1),
             layer_size=reward_inner,
             heads=reward_heads,
             dropout=reward_dropout
         )
         self.PolicyNetwork = CrossAttentionMap(
-            latent_size,
-            policy_size,
+            self.latent.size(-1),
+            self.policy.size(-1),
             layer_size=policy_inner,
             heads=policy_heads,
             dropout=policy_dropout
         )
 
-    def forward(self,x,latent,reward,policy):
+    def forward(self,x):
         x_emb = self.Embedding(x)
         x_emb = self.PosEncoder(x_emb)
-        latent = self.LatentMap(latent,x_emb)
+        latent = self.LatentMap(self.latent,x_emb)
         enc = self.Perceiver(x_emb,latent)
 
-        reward = self.RewardMap(reward,x_emb)
+        reward = self.RewardMap(self.reward,x_emb)
         v = self.RewardNetwork(reward,enc)
 
-        policy = self.PolicyMap(policy,x_emb)
+        policy = self.PolicyMap(self.policy,x_emb)
         p = self.PolicyNetwork(policy,enc)
         return v,p

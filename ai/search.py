@@ -9,7 +9,7 @@ class MCTS:
     Description: MCTS initail variables
     Output: None
     """
-    def __init__(self,model,Cpuct=0.77,max_depth=5,user=None:
+    def __init__(self,model,Cpuct=0.77,max_depth=5,user=None):
         self.tree = {} #Game tree
         self.user = user #What player is searching
         self.Cpuct = Cpuct #Exploration hyper parameter [0-1]
