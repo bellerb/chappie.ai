@@ -107,27 +107,6 @@ class Perceiver(nn.Module):
         z = self.latent_transformer(z)
         return z
 
-class CrossAttentionMap(nn.Module):
-    def __init__(
-        self,
-        input_size,
-        latent_size,
-        layer_size=64,
-        heads=1,
-        dropout=0.5
-    ):
-        super(CrossAttentionMap, self).__init__()
-        self.decode = Attention(
-            latent_size,
-            layer_size=layer_size,
-            context_size=input_size,
-            heads=heads,
-            dropout=dropout
-        )
-
-    def forward(self,latent,context):
-        return self.decode(latent,context)
-
 class PositionalEncoding(nn.Module):
     def __init__(
         self,
@@ -179,9 +158,9 @@ class ChappieZero(nn.Module):
         policy_dropout=0.5
     ):
         super(ChappieZero, self).__init__()
-        self.latent = torch.full(latent_size,1.)
-        self.reward = torch.full(reward_size,1.)
-        self.policy = torch.full(policy_size,1.)
+        self.latent = nn.Parameter(torch.empty(latent_size))
+        self.reward = nn.Parameter(torch.empty(reward_size))
+        self.policy = nn.Parameter(torch.empty(policy_size))
         self.Embedding = nn.Embedding(ntoken,embedding_size,padding_idx=padding_idx)
         self.PosEncoder = PositionalEncoding(embedding_size,encoder_dropout)
         self.Perceiver = Perceiver(
@@ -195,19 +174,19 @@ class ChappieZero(nn.Module):
             cross_dropout=cross_dropout,
             self_dropout=self_dropout
         )
-        self.RewardNetwork = CrossAttentionMap(
-            self.latent.size(-1),
+        self.RewardNetwork = Attention(
             self.reward.size(-1),
             layer_size=reward_inner,
+            context_size = self.latent.size(-1),
             heads=reward_heads,
             dropout=reward_dropout
         )
-        self.PolicyNetwork = CrossAttentionMap(
-            self.latent.size(-1),
+        self.PolicyNetwork = Attention(
             self.policy.size(-1),
-            layer_size=policy_inner,
-            heads=policy_heads,
-            dropout=policy_dropout
+            layer_size=reward_inner,
+            context_size = self.latent.size(-1),
+            heads=reward_heads,
+            dropout=reward_dropout
         )
 
     def forward(self,x):
