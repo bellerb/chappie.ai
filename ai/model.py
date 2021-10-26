@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from math import log
-from einops import rearrange
+from einops import rearrange, repeat
 
 class Attention(nn.Module):
     def __init__(
@@ -158,9 +158,9 @@ class ChappieZero(nn.Module):
         policy_dropout=0.5
     ):
         super(ChappieZero, self).__init__()
-        self.latent = nn.Parameter(torch.empty(latent_size))
-        self.reward = nn.Parameter(torch.empty(reward_size))
-        self.policy = nn.Parameter(torch.empty(policy_size))
+        self.latent = nn.Parameter(torch.randn(latent_size))
+        self.reward = nn.Parameter(torch.randn(reward_size))
+        self.policy = nn.Parameter(torch.randn(policy_size))
         self.Embedding = nn.Embedding(ntoken,embedding_size,padding_idx=padding_idx)
         self.PosEncoder = PositionalEncoding(embedding_size,encoder_dropout)
         self.Perceiver = Perceiver(
@@ -188,11 +188,19 @@ class ChappieZero(nn.Module):
             heads=reward_heads,
             dropout=reward_dropout
         )
+        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self,x):
         x_emb = self.Embedding(x)
         x_emb = self.PosEncoder(x_emb)
-        enc = self.Perceiver(x_emb,self.latent)
-        v = self.RewardNetwork(self.reward,enc)
-        p = self.PolicyNetwork(self.policy,enc)
+        latent = repeat(self.latent,'y x -> b y x',b=x.size(0))
+        enc = self.Perceiver(x_emb,latent)
+
+        reward = repeat(self.reward,'y x -> b y x',b=enc.size(0))
+        v = self.RewardNetwork(reward,enc)
+        v = self.softmax(v)
+
+        policy = repeat(self.policy,'y x -> b y x',b=enc.size(0))
+        p = self.PolicyNetwork(policy,enc)
+        p = self.softmax(p)
         return v,p
