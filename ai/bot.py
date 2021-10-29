@@ -4,10 +4,12 @@ import math
 from ai.search import MCTS
 from ai.model import ChappieZero
 
+from games.chess.chess import Chess
+
 import torch
 
 class Agent():
-    def __init__(self,folder='data/',model_name='model_active.pth.tar',param_name='model_param.json'):
+    def __init__(self,folder='data/',model_name='model_active.pth.tar',param_name='model_param.json',search_amount=20):
         #Model parameters
         self.Device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         param_path = os.path.join(folder,param_name)
@@ -51,14 +53,26 @@ class Agent():
         #Inialize search
         self.MCTS = MCTS(self.Model)
 
-    def choose_action(self,game):
-        self.MCTS.search(self,game,parent_hash)
-        u_bank = {}
-        for s,a in game.actions():
-            u_bank[(s,a)] = self.MCTS.tree[hash].Q + (self.MCTS.Cpuct * self.MCTS.tree[hash].P * (math.sqrt(math.log(self.MCTS.tree[parent_hash].N)/(1+self.MCTS.tree[hash].N))))
-        m_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
-        if len(m_bank) > 0:
-            action = random.choice(m_bank)
-        else:
-            action = ''
-        return action
+    def choose_action(self,task):
+        for _ in range(self.search_amount):
+            self.MCTS.search(task)
+        return self.MCTS.UCB(task)
+
+    class chess_game():
+        def __init__():
+            self.game = Chess()
+
+        def state(self):
+            pass
+
+        def enc_state(self):
+            pass
+
+        def actions(self):
+            pass
+
+        def play(self):
+            pass
+
+        def train(self):
+            pass
