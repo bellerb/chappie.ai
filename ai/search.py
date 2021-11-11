@@ -96,10 +96,11 @@ class MCTS:
         a_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
         return random.choice(a_bank)
         
-    def search(self, s, a = None):
+    def search(self, s, a = None, train = False):
         """
         Input: s - tensor representing hidden state of task
                a - integer representing which action is being performed (default = None) [OPTIONAL]
+               train - boolean representing if search is being used in training mode (default = False) [OPTIONAL]
         Description: Search the task action tree using upper confidence value
         Output: predicted value
         """
@@ -112,7 +113,7 @@ class MCTS:
         sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
         if self.tree[(s_hash, a)].N == 0:
             v_k, p = self.f(s) #Value and policy prediction using prediction function
-            if a is None:
+            if a is None and train == True:
                 p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
             self.tree[(s_hash, a)].Q = v_k
             #EXPANSION ---
