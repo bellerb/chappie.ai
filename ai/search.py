@@ -1,3 +1,6 @@
+import math
+import random
+
 class MCTS:
     """
     Monte Carlo Tree Search algorithm used to search game tree for the best move
@@ -9,7 +12,12 @@ class MCTS:
         user = None,
         c1 = 1.25,
         c2 = 19652,
-        max_depth = 5
+        d_a = .3,
+        e_f = .25,
+        g_d = 1.,
+        Q_max = 1,
+        Q_min = -1,
+        max_depth = float('inf')
     ):
         """
         Input: prediction - NN used to predict p, v values
@@ -17,7 +25,12 @@ class MCTS:
                user - integer representing which user the agent is (default = None) [OPTIONAL]
                c1 - float representing a search hyperparameter (default = 1.25) [OPTIONAL]
                c2 - float representing a search hyperparameter (default = 19652) [OPTIONAL]
-               max_depth - integer representing the max allowable depth to search (default = 5) [OPTIONAL]
+               d_a = float representing the dirichlet alpha you wish to use (default = 0.3) [OPTIONAL]
+               e_f = float representing the exploration fraction you wish to use with dirichlet alpha noise (default = 0.25) [OPTIONAL]
+               g_d = float representing the gamma discount to apply to v_k+1 when backpropagating tree (default = 1) [OPTIONAL]
+               Q_max = float representing the max value (default = 1) [OPTIONAL]
+               Q_min = float representing the min value (default = -1) [OPTIONAL]
+               max_depth - integer representing the max allowable depth to search tree (default = inf) [OPTIONAL]
         Description: MCTS initail variables
         Output: None
         """
@@ -26,8 +39,13 @@ class MCTS:
         self.max_depth = max_depth #Max allowable depth
         self.c1 = c1 #Exploration hyper parameter 1
         self.c2 = c2 #Exploration hyper parameter 2
-        self.f = dynamics #Model used for dynamics
-        self.g = prediction #Model used for prediction
+        self.d_a = d_a #Dirichlet alpha
+        self.e_f = e_f #Exploration fraction
+        self.g_d = g_d #Gamma discount
+        self.Q_max = Q_max #Max value
+        self.Q_min = Q_min #Min value
+        self.g = dynamics #Model used for dynamics
+        self.f = prediction #Model used for prediction
 
     class Node:
         """
@@ -39,13 +57,12 @@ class MCTS:
             Description: Node initail variables
             Output: None
             """
+            self.N = 0 #Visits
             self.Q = 0 #Value
             self.R = 0 #Reward
-            self.P = 0 #Policy
-            self.N = 0 #Visits
-            self.Parent = () #Parent Node
+            self.P = None #Policy
             
-    def state_hash(s):
+    def state_hash(self, s):
         """
         Input: s - tensor representing hidden state of task
         Description: generate unique hash of the supplied hidden state
@@ -54,37 +71,30 @@ class MCTS:
         result = hash(str(s))
         return result
     
-    def parent_sum(self, n, c = False):
+    def dirichlet_noise(self, p):
         """
-        Input: n - object containing (s, a) edge between nodes
-               c - boolean representing if hyperparameter is to be used (default = False) [OPTIONAL]
-        Description: find the amount of times parent nodes have been visited
-        Output: float containing the resultant value
+        Input: p - list of floats [0-1] representing action probability distrabution
+        Description: add dirichlet noise to probability distrabution
+        Output: list of floats [0-1] representing action probability with added noise
         """
-        result = 0.
-        if n.Parent is not ():
-            if c == False:
-                result += (self.tree[n.Parent].N + self.parent_sum(self.tree[n.Parent]))
-            else:
-                result += (self.tree[n.Parent].N + self.c2 + 1 + self.parent_sum(self.tree[n.Parent], c = True))
-        return result
-
-    def UCB(self, s):
+        d = np.random.dirichlet([self.d_a] * len(p))
+        return (d * self.e_f) + ((1 - self.e_f) * p)
+    
+    def pUCT(self, s):
         """
-        Input: s - integer representing the task state hash
-        Description: return best action state using upper confidence value
+        Input: s - tensor representing hidden state of task
+        Description: return best action state using polynomial upper confidence trees
         Output: integer containing the best action
         """
-        u = {}
-        for a in range(self.prediction.action_space):
-            x = (self.parent_sum(self.tree[(s, a)])**(0.5))/1+self.tree[(s, a)].N #First part of exploration
-            x = x * (self.c1 + math.log(self.parent_sum(self.tree[(s, a)], c = True)/self.c2)) #Second part of exploration
-            u[a] = self.tree[(s, a)].Q + (self.tree[(s, a)].P  * x)
-        a_bank = [k for k,v in u.items() if v == max(u.values())]
-        if len(a_bank) > 0:
-            return random.choice(a_bank)
-        else:
-            return None
+        p_visits = sum([self.tree[(s, b)].N for b in range(self.f.action_space)]) #Sum of all potential nodes
+        u_bank = {}
+        for a in range(self.f.action_space):
+            U = self.tree[(s, a)].P * ((p_visits**(0.5))/(1+self.tree[(s, a)].N)) #First part of exploration
+            U *= self.c1 + (math.log((p_visits + (self.f.action_space * self.c2) + self.f.action_space) / self.c2)) #Second part of exploration
+            Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
+            u_bank[a] = Q_n + U
+        a_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
+        return random.choice(a_bank)
         
     def search(self, s, a = None):
         """
@@ -95,23 +105,28 @@ class MCTS:
         """
         s_hash = self.state_hash(s) #Create hash of state [sk-1] for game tree
         if (s_hash, a) not in self.tree:
-            self.tree[(s_hash, a)] = Node() #Initialize new game tree node
-        else:
-            self.tree[(s_hash, a)].N += 1
+            self.tree[(s_hash, a)] = self.Node() #Initialize new game tree node
         if a is not None:
             r_k, s = self.g(s, a) #Reward and state prediction using dynamics function
             self.tree[(s_hash, a)].R = r_k
-        if self.tree[(s_hash, a)].Q == 0:
-            v, p = self.f(s) #Value and policy prediction using prediction function
-            self.tree[(s_hash, a)].Q = v
-            sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
+        sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
+        if self.tree[(s_hash, a)].N == 0:
+            v_k, p = self.f(s) #Value and policy prediction using prediction function
+            if a is None:
+                p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
+            self.tree[(s_hash, a)].Q = v_k
+            #EXPANSION ---
             for a_k, p_a in enumerate(p):
-                self.tree[(sk_hash, a_k)] = Node()
+                self.tree[(sk_hash, a_k)] = self.Node()
                 self.tree[(sk_hash, a_k)].P = p_a
-                self.tree[(sk_hash, a_k)].Parent = (s_hash, a)
+            self.tree[(s_hash, a)].N += 1
             return self.tree[(s_hash, a)].Q
-        a_k = self.UCB(s_hash)
+        a_k = self.pUCT(sk_hash) #Find best action to perform @ [sk]
         if self.depth < self.max_depth:
             self.depth += 1
-            self.tree[(s_hash, a)].Q = self.search(s, a_k)
+            #BACKUP ---
+            g = self.tree[(s_hash, a)].R + self.g_d * self.search(s, a_k) #Discounted value at current node
+            q_m = (self.tree[(s_hash, a)].N * self.tree[(s_hash, a)].Q + g) / self.tree[(s_hash, a)].N #Mean value
+            self.tree[(s_hash, a)].Q = q_m
+        self.tree[(s_hash, a)].N += 1
         return self.tree[(s_hash, a)].Q
