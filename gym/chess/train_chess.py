@@ -50,9 +50,9 @@ class train:
             for i, p in enumerate(players):
                 m_check = False
                 while True:
-                    if True in [True for s in human_code if str(p).lower() == s] and len(log) <= 1:
+                    if str(p).lower() in human_code and len(log) < len(players):
                         a_players[i] = 'human'
-                    elif len(log) <= 1:
+                    elif len(log) < len(players):
                         a_players[i] = deepcopy(Agent(param_name = p, train = train)))
                     if 'human' in a_players:
                         if chess_game.p_move == 1:
@@ -91,7 +91,7 @@ class train:
                                     **{f'action{x}':1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)}})
                         print(f'w {cur.lower()}-->{next.lower()} | EPOCH:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n') if chess_game.p_move > 0 else print(f'b {cur.lower()}-->{next.lower()} | EPOCH:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
 
-                        if True not in [True for s in human_code if str(p).lower() == s]
+                        if a_players[i] != 'human':
                             state = chess_game.check_state(chess_game.EPD_hash())
                             if state == '50M' or state == '3F':
                                 state = [0,1,0] #Auto tie
