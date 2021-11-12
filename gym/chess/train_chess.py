@@ -12,21 +12,9 @@ from ai.bot import Agent
 from tasks.chess.chess import Chess
 from gym.chess.game_plumbing import Plumbing
 
-"""
-Reinforcement training for AI
-"""
 class train:
     """
-    Input: game_name - string representing the game board name
-           epoch - integer representing the current epoch
-           train - boolean representing the training control (Default=False) [OPTIONAL]
-           white - string representing the file name for the white player (Default='model-active.pth.tar') [OPTIONAL]
-           black - string representing the file name for the black player (Default='model-new.pth.tar') [OPTIONAL]
-           search_amount - integer representing the amount of searches the ai's should perform (Default=50) [OPTIONAL]
-           max_depth - integer representing the max depth each search can go (Default=5) [OPTIONAL]
-           best_of - integer representing the amount of games played in a bracket (Default=5) [OPTIONAL]
-    Description: Plays game for training
-    Output: tuple containing game state, training data and which of the players won
+    Reinforcement training for AI
     """
     def play_game(
         game_name,
@@ -37,6 +25,18 @@ class train:
             'param':'model-active.pth.tar'
         ]
     ):
+        """
+        Input: game_name - string representing the game board name
+               epoch - integer representing the current epoch
+               train - boolean representing the training control (Default=False) [OPTIONAL]
+               white - string representing the file name for the white player (Default='model-active.pth.tar') [OPTIONAL]
+               black - string representing the file name for the black player (Default='model-new.pth.tar') [OPTIONAL]
+               search_amount - integer representing the amount of searches the ai's should perform (Default=50) [OPTIONAL]
+               max_depth - integer representing the max depth each search can go (Default=5) [OPTIONAL]
+               best_of - integer representing the amount of games played in a bracket (Default=5) [OPTIONAL]
+        Description: Plays game for training
+        Output: tuple containing game state, training data and which of the players won
+        """
         human_code = [
             'h',
             'hum',

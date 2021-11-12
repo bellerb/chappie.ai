@@ -9,7 +9,7 @@ from train import gym
 import torch
 
 class Agent():
-    def __init__(self,folder='data/', param_name='model_param.json', train = False):
+    def __init__(self, param_name='model_param.json', train = False):
         #Model parameters
         self.Device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         param_path = os.path.join(folder, param_name)
@@ -54,7 +54,7 @@ class Agent():
         self.MCTS = MCTS(self.Model)
         self.sim_amt = sim_amt
 
-    def choose_action(self, representation, state):
+    def choose_action(self, state):
         h_s = representation(state)
         for _ in range(self.sim_amt):
             self.MCTS.search(state)
