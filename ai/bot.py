@@ -4,15 +4,15 @@ import math
 from ai.search import MCTS
 from ai.model import ChappieZero
 
-from games.chess.chess import Chess
+from train import gym
 
 import torch
 
 class Agent():
-    def __init__(self,folder='data/',model_name='model_active.pth.tar',param_name='model_param.json',search_amount=20):
+    def __init__(self,folder='data/', param_name='model_param.json', train = False):
         #Model parameters
         self.Device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        param_path = os.path.join(folder,param_name)
+        param_path = os.path.join(folder, param_name)
         if os.path.exists(param_path):
             with open(param_path) as f:
                 m_param = json.load(f)
@@ -45,34 +45,18 @@ class Agent():
             policy_heads=m_param['policy-heads'],
             policy_dropout=m_param['policy-dropout']
         ).to(self.Device)
-        model_path = os.path.join(folder,model_name)
+        model_path = os.path.join(folder, model_name)
         if os.path.exists(model_path):
             with open(model_path) as f:
-                checkpoint = torch.load(f,map_location=self.Device)
+                checkpoint = torch.load(f, map_location=self.Device)
                 self.Model.load_state_dict(checkpoint['state_dict'])
         #Inialize search
         self.MCTS = MCTS(self.Model)
+        self.sim_amt = sim_amt
 
-    def choose_action(self,task):
-        for _ in range(self.search_amount):
-            self.MCTS.search(task)
-        return self.MCTS.UCB(task)
-
-    class chess_game():
-        def __init__():
-            self.game = Chess()
-
-        def state(self):
-            pass
-
-        def enc_state(self):
-            pass
-
-        def actions(self):
-            pass
-
-        def play(self):
-            pass
-
-        def train(self):
-            pass
+    def choose_action(self, representation, state):
+        h_s = representation(state)
+        for _ in range(self.sim_amt):
+            self.MCTS.search(state)
+        s_hash = self.MCTS.state_hash(state)
+        return self.MCTS.UCB(s_hash)

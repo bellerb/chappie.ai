@@ -1,0 +1,28 @@
+{
+  "model": {
+    "input-size":65,
+    "latent-size":[30, 30],
+    "reward-size":[1, 3],
+    "policy-size":[64, 64],
+    "ntoken":35,
+    "embedding-size":200,
+    "padding-idx":32,
+    "encoder-dropout":0.5,
+    "latent-inner":400,
+    "latent-heads":2,
+    "latent-dropout":0.5,
+    "perceiver-inner":400,
+    "recursions":3,
+    "transformer-blocks":5,
+    "cross-heads":2,
+    "self-heads":2,
+    "cross-dropout":0.5,
+    "self-dropout":0.5,
+    "reward-inner":400,
+    "reward-heads":2,
+    "reward-dropout":0.5,
+    "policy-inner":400,
+    "policy-heads":2,
+    "policy-dropout":0.5
+  }
+}

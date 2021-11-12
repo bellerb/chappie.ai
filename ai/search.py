@@ -6,7 +6,7 @@ class MCTS:
     Monte Carlo Tree Search algorithm used to search game tree for the best move
     """
     def __init__(
-        self, 
+        self,
         prediction,
         dynamics,
         user = None,
@@ -61,7 +61,7 @@ class MCTS:
             self.Q = 0 #Value
             self.R = 0 #Reward
             self.P = None #Policy
-            
+
     def state_hash(self, s):
         """
         Input: s - tensor representing hidden state of task
@@ -70,7 +70,7 @@ class MCTS:
         """
         result = hash(str(s))
         return result
-    
+
     def dirichlet_noise(self, p):
         """
         Input: p - list of floats [0-1] representing action probability distrabution
@@ -79,12 +79,12 @@ class MCTS:
         """
         d = np.random.dirichlet([self.d_a] * len(p))
         return (d * self.e_f) + ((1 - self.e_f) * p)
-    
+
     def pUCT(self, s):
         """
         Input: s - tensor representing hidden state of task
         Description: return best action state using polynomial upper confidence trees
-        Output: integer containing the best action
+        Output: list containing pUCT values for all acitons
         """
         p_visits = sum([self.tree[(s, b)].N for b in range(self.f.action_space)]) #Sum of all potential nodes
         u_bank = {}
@@ -93,9 +93,8 @@ class MCTS:
             U *= self.c1 + (math.log((p_visits + (self.f.action_space * self.c2) + self.f.action_space) / self.c2)) #Second part of exploration
             Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
             u_bank[a] = Q_n + U
-        a_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
-        return random.choice(a_bank)
-        
+        return u_bank
+
     def search(self, s, a = None, train = False):
         """
         Input: s - tensor representing hidden state of task
@@ -122,7 +121,9 @@ class MCTS:
                 self.tree[(sk_hash, a_k)].P = p_a
             self.tree[(s_hash, a)].N += 1
             return self.tree[(s_hash, a)].Q
-        a_k = self.pUCT(sk_hash) #Find best action to perform @ [sk]
+        u_bank = self.pUCT(sk_hash) #Find best action to perform @ [sk]
+        a_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
+        a_k = random.choice(a_bank)
         if self.depth < self.max_depth:
             self.depth += 1
             #BACKUP ---
