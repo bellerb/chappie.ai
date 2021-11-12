@@ -51,7 +51,19 @@ class Agent():
                 checkpoint = torch.load(f, map_location=self.Device)
                 self.Model.load_state_dict(checkpoint['state_dict'])
         #Inialize search
-        self.MCTS = MCTS(self.Model)
+        self.MCTS = MCTS(
+            prediction,
+            dynamics,
+            user = None,
+            c1 = 1.25,
+            c2 = 19652,
+            d_a = .3,
+            e_f = .25,
+            g_d = 1.,
+            Q_max = 1,
+            Q_min = -1,
+            max_depth = float('inf')
+        )
         self.sim_amt = sim_amt
 
     def choose_action(self, state):
