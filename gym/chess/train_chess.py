@@ -143,6 +143,11 @@ class chess:
         return state, game_train_data, a_colour
 
     def legal_moves(self, chess_game):
+        """
+        Input: chess_game - object containing the current chess game
+        Description: returns all legal moves
+        Output: numpy array containing all legal moves
+        """
         legal = np.zeros((8,8,8,8))
         for cur,moves in chess_game.possible_board_moves(capture=True).items():
             if len(moves) > 0 and ((cur[0].isupper() and chess_game.p_move == 1) or (cur[0].islower() and chess_game.p_move == -1)):

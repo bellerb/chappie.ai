@@ -18,6 +18,7 @@ class MCTS:
         g_d = 1.,
         Q_max = 1,
         Q_min = -1,
+        single_player = False,
         max_depth = float('inf')
     ):
         """
@@ -47,6 +48,7 @@ class MCTS:
         self.Q_min = Q_min #Min value
         self.g = dynamics #Model used for dynamics
         self.f = prediction #Model used for prediction
+        self.single_player = single_player #Control for if the task is single player or not
 
     class Node:
         """
@@ -124,7 +126,10 @@ class MCTS:
                     self.tree[(sk_hash, a_k)] = self.Node()
                 self.tree[(sk_hash, a_k)].P = p_a
             self.tree[(s_hash, a)].N += 1
-            return self.tree[(s_hash, a)].Q
+            if self.single_player == True:
+                return self.tree[(s_hash, a)].Q
+            else:
+                return -self.tree[(s_hash, a)].Q
         a_k = self.pUCT(sk_hash) #Find best action to perform @ [sk]
         if self.depth < self.max_depth:
             self.depth += 1
@@ -133,4 +138,7 @@ class MCTS:
             q_m = (self.tree[(s_hash, a)].N * self.tree[(s_hash, a)].Q + g) / self.tree[(s_hash, a)].N #Mean value
             self.tree[(s_hash, a)].Q = q_m
         self.tree[(s_hash, a)].N += 1
-        return self.tree[(s_hash, a)].Q
+        if self.single_player == True:
+            return self.tree[(s_hash, a)].Q
+        else:
+            return -self.tree[(s_hash, a)].Q

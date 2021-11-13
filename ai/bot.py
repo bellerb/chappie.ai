@@ -84,7 +84,6 @@ class Agent():
         self.MCTS = MCTS(
             predictions,
             dynamics,
-            user = None,
             c1 = m_param['search']['c1'],
             c2 = m_param['search']['c2'],
             d_a = m_param['search']['d_a'],
@@ -92,6 +91,7 @@ class Agent():
             g_d = m_param['search']['g_d'],
             Q_max = m_param['search']['Q_max'],
             Q_min = m_param['search']['Q_min'],
+            single_player = m_param['search']['single_player'],
             max_depth = float('inf') if m_param['search']['max_depth'] == None else m_param['search']['max_depth']
         )
         self.train = train

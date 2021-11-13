@@ -1,6 +1,5 @@
 {
   "search":{
-    "user" : null,
     "T": [
       [500000, 1],
       [750000, 0.5],
@@ -14,7 +13,8 @@
     "g_d" : 1.0,
     "Q_max" : 1,
     "Q_min" : -1,
-    "max_depth" : null
+    "max_depth" : null,
+    "single_player": false
   },
   "representation": {
     "model_location":null,
