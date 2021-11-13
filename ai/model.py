@@ -1,7 +1,8 @@
-import torch
-import torch.nn as nn
-
 from math import log
+
+import torch
+from torch import nn
+
 from einops import rearrange, repeat
 
 class Attention(nn.Module):
@@ -15,16 +16,40 @@ class Attention(nn.Module):
     ):
         super(Attention, self).__init__()
         self.heads = heads
-        self.Q = nn.Linear(input_size, layer_size, bias = False)
+        self.Q = nn.Linear(
+            input_size,
+            layer_size,
+            bias = False
+        )
         if context_size is None:
-            self.K = nn.Linear(input_size, layer_size, bias = False)
-            self.V = nn.Linear(input_size, layer_size, bias = False)
+            self.K = nn.Linear(
+                input_size,
+                layer_size,
+                bias = False
+            )
+            self.V = nn.Linear(
+                input_size,
+                layer_size,
+                bias = False
+            )
         else:
-            self.K = nn.Linear(context_size, layer_size, bias = False)
-            self.V = nn.Linear(context_size, layer_size, bias = False)
+            self.K = nn.Linear(
+                context_size,
+                layer_size,
+                bias = False
+            )
+            self.V = nn.Linear(
+                context_size,
+                layer_size,
+                bias = False
+            )
         self.softmax = nn.Softmax(dim = -1)
         self.output = nn.Sequential(
-            nn.Linear(layer_size, input_size, bias = False),
+            nn.Linear(
+                layer_size,
+                input_size,
+                bias = False
+            ),
             nn.Dropout(dropout)
         )
 
@@ -32,9 +57,15 @@ class Attention(nn.Module):
         #h:heads, b:batches, y:y-axis x:x-axis
         q = rearrange(self.Q(x), 'b y (h x) -> (b h) y x', h = self.heads) #Query
         if context is None:
-            k, v = map(lambda x:rearrange(x, 'b y (h x) -> (b h) y x', h = self.heads), (self.K(x), self.V(x)))
+            k, v = map(
+                lambda x:rearrange(x, 'b y (h x) -> (b h) y x', h = self.heads),
+                (self.K(x), self.V(x))
+            )
         else:
-            k, v = map(lambda x:rearrange(x, 'b y (h x) -> (b h) y x', h = self.heads), (self.K(context), self.V(context)))
+            k, v = map(
+                lambda x:rearrange(x, 'b y (h x) -> (b h) y x', h = self.heads),
+                (self.K(context), self.V(context))
+            )
         #b:batches, y:y-axis, q:q x-axis, k: k x-axis
         z = torch.einsum('b q y, b k y -> b k q', q, k) / (x.size(-1)**(0.5)) #Scaled dot-product [QK.T/sqrt(dk)]
 
@@ -59,9 +90,18 @@ class DecoderOnlyTransformer(nn.Module):
         dropout = 0.5
     ):
         super(DecoderOnlyTransformer, self).__init__()
-        self.self_attention = Attention(input_size, layer_size = layer_size, heads = heads, dropout = dropout)
+        self.self_attention = Attention(
+            input_size,
+            layer_size = layer_size,
+            heads = heads,
+            dropout = dropout
+        )
         self.linear = nn.Sequential(
-            nn.Linear(input_size, input_size, bias = False),
+            nn.Linear(
+                input_size,
+                input_size,
+                bias = False
+            ),
             nn.Dropout(dropout)
         )
 
@@ -122,7 +162,11 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p = dropout)
 
         pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype = torch.float).unsqueeze(1)
+        position = torch.arange(
+            0,
+            max_len,
+            dtype = torch.float
+        ).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
@@ -136,17 +180,12 @@ class PositionalEncoding(nn.Module):
 class Representation(nn.Module):
     def __init__(
         self,
-        input_size,
         latent_size,
-        reward_size,
-        policy_size,
+        h_size,
         ntoken = 30,
         embedding_size = 64,
         padding_idx = 29,
         encoder_dropout = 0.5,
-        latent_inner = 64,
-        latent_heads = 1,
-        latent_dropout = 0.5,
         perceiver_inner = 64,
         recursions = 1,
         transformer_blocks = 1,
@@ -154,18 +193,22 @@ class Representation(nn.Module):
         self_heads = 1,
         cross_dropout = 0.5,
         self_dropout = 0.5,
-        reward_inner = 64,
-        reward_heads = 1,
-        reward_dropout = 0.5,
-        policy_inner = 64,
-        policy_heads = 1,
-        policy_dropout = 0.5
+        h_inner = 64,
+        h_heads = 1,
+        h_dropout = 0.5
     ):
         super(Representation, self).__init__()
         self.latent = nn.Parameter(torch.randn(latent_size))
-        self.hidden = nn.Parameter(torch.randn(reward_size))
-        self.Embedding = nn.Embedding(ntoken, embedding_size, padding_idx = padding_idx)
-        self.PosEncoder = PositionalEncoding(embedding_size, encoder_dropout)
+        self.hidden = nn.Parameter(torch.randn(h_size))
+        self.Embedding = nn.Embedding(
+            ntoken,
+            embedding_size,
+            padding_idx = padding_idx
+        )
+        self.PosEncoder = PositionalEncoding(
+            embedding_size,
+            encoder_dropout
+        ),
         self.Perceiver = Perceiver(
             embedding_size,
             self.latent.size(-1),
@@ -179,19 +222,18 @@ class Representation(nn.Module):
         )
         self.HiddenNetwork = Attention(
             self.hidden.size(-1),
-            layer_size = reward_inner,
+            layer_size = h_inner,
             context_size = self.latent.size(-1),
-            heads = reward_heads,
-            dropout = reward_dropout
+            heads = h_heads,
+            dropout = h_dropout
         )
         self.softmax = nn.Softmax(dim = -1)
 
     def forward(self, s):
         s_emb = self.Embedding(s)
-        s_emb = self.PosEncoder(s_emb)
-        latent = repeat(self.latent, 'y x -> b y x', b = x.size(0))
+        #s_emb = self.PosEncoder(s_emb)
+        latent = repeat(self.latent, 'y x -> b y x', b = s.size(0))
         enc = self.Perceiver(s_emb, latent)
-
         hidden = repeat(self.hidden, 'y x -> b y x', b = enc.size(0))
         h = self.HiddenNetwork(hidden, enc)
         h = self.softmax(h)
@@ -200,17 +242,10 @@ class Representation(nn.Module):
 class Predictions(nn.Module):
     def __init__(
         self,
-        input_size,
+        state_size,
         latent_size,
-        reward_size,
+        value_size,
         policy_size,
-        ntoken = 30,
-        embedding_size = 64,
-        padding_idx = 29,
-        encoder_dropout = 0.5,
-        latent_inner = 64,
-        latent_heads = 1,
-        latent_dropout = 0.5,
         perceiver_inner = 64,
         recursions = 1,
         transformer_blocks = 1,
@@ -218,21 +253,20 @@ class Predictions(nn.Module):
         self_heads = 1,
         cross_dropout = 0.5,
         self_dropout = 0.5,
-        reward_inner = 64,
-        reward_heads = 1,
-        reward_dropout = 0.5,
+        value_inner = 64,
+        value_heads = 1,
+        value_dropout = 0.5,
         policy_inner = 64,
         policy_heads = 1,
         policy_dropout = 0.5
     ):
         super(Predictions, self).__init__()
+        self.action_space = policy_size
         self.latent = nn.Parameter(torch.randn(latent_size))
-        self.value = nn.Parameter(torch.randn(reward_size))
+        self.value = nn.Parameter(torch.randn(value_size))
         self.policy = nn.Parameter(torch.randn(policy_size))
-        self.Embedding = nn.Embedding(ntoken, embedding_size, padding_idx = padding_idx)
-        self.PosEncoder = PositionalEncoding(embedding_size, encoder_dropout)
         self.Perceiver = Perceiver(
-            embedding_size,
+            state_size[-1],
             self.latent.size(-1),
             recursions = recursions,
             transformer_blocks = transformer_blocks,
@@ -244,31 +278,29 @@ class Predictions(nn.Module):
         )
         self.ValueNetwork = Attention(
             self.value.size(-1),
-            layer_size = reward_inner,
+            layer_size = value_inner,
             context_size = self.latent.size(-1),
-            heads = reward_heads,
-            dropout = reward_dropout
+            heads = value_heads,
+            dropout = value_dropout
         )
         self.PolicyNetwork = Attention(
             self.policy.size(-1),
-            layer_size = reward_inner,
+            layer_size = policy_inner,
             context_size = self.latent.size(-1),
-            heads = reward_heads,
-            dropout = reward_dropout
+            heads = policy_heads,
+            dropout = policy_dropout
         )
         self.softmax = nn.Softmax(dim = -1)
 
     def forward(self, s):
-        s_emb = self.Embedding(s)
-        s_emb = self.PosEncoder(s_emb)
-        latent = repeat(self.latent, 'y x -> b y x', b = x.size(0))
-        enc = self.Perceiver(s_emb, latent)
+        latent = repeat(self.latent, 'y x -> b y x', b = s.size(0))
+        enc = self.Perceiver(s, latent)
 
-        value = repeat(self.reward, 'y x -> b y x', b = enc.size(0))
+        value = repeat(self.value, 'x -> b y x', b = enc.size(0), y = 1)
         v = self.ValueNetwork(value, enc)
         v = self.softmax(v)
 
-        policy = repeat(self.policy, 'y x -> b y x', b = enc.size(0))
+        policy = repeat(self.policy, 'x -> b y x', b = enc.size(0), y = 1)
         p = self.PolicyNetwork(policy, enc)
         p = self.softmax(p)
         return v, p
@@ -276,17 +308,14 @@ class Predictions(nn.Module):
 class Dynamics(nn.Module):
     def __init__(
         self,
-        input_size,
-        latent_size,
+        state_size,
         reward_size,
         policy_size,
         ntoken = 30,
+        action_space = 4096,
         embedding_size = 64,
         padding_idx = 29,
         encoder_dropout = 0.5,
-        latent_inner = 64,
-        latent_heads = 1,
-        latent_dropout = 0.5,
         perceiver_inner = 64,
         recursions = 1,
         transformer_blocks = 1,
@@ -297,19 +326,29 @@ class Dynamics(nn.Module):
         reward_inner = 64,
         reward_heads = 1,
         reward_dropout = 0.5,
-        policy_inner = 64,
-        policy_heads = 1,
-        policy_dropout = 0.5
+        state_k_inner = 64,
+        state_k_heads = 1,
+        state_k_dropout = 0.5
     ):
         super(Dynamics, self).__init__()
         self.reward = nn.Parameter(torch.randn(reward_size))
-        self.state = nn.Parameter(torch.randn(policy_size))
-        self.Embedding = nn.Embedding(ntoken, embedding_size, padding_idx = padding_idx)
-        self.ActionSpace = nn.Embedding(ntoken, embedding_size, padding_idx = padding_idx)
-        self.PosEncoder = PositionalEncoding(embedding_size, encoder_dropout)
+        self.state = nn.Parameter(torch.randn(state_size))
+        self.Embedding = nn.Embedding(
+            ntoken,
+            embedding_size,
+            padding_idx = padding_idx
+        )
+        self.ActionSpace = nn.Embedding(
+            action_space,
+            embedding_size
+        )
+        self.PosEncoder = PositionalEncoding(
+            embedding_size,
+            encoder_dropout
+        )
         self.Perceiver = Perceiver(
             embedding_size,
-            self.latent.size(-1),
+            state_size[-1],
             recursions = recursions,
             transformer_blocks = transformer_blocks,
             layer_size = perceiver_inner,
@@ -321,30 +360,27 @@ class Dynamics(nn.Module):
         self.RewardNetwork = Attention(
             self.reward.size(-1),
             layer_size = reward_inner,
-            context_size = self.latent.size(-1),
+            context_size = state_size[-1],
             heads = reward_heads,
             dropout = reward_dropout
         )
         self.StateNetwork = Attention(
             self.state.size(-1),
-            layer_size = reward_inner,
-            context_size = self.latent.size(-1),
-            heads = reward_heads,
-            dropout = reward_dropout
+            layer_size = state_k_inner,
+            context_size = state_size[-1],
+            heads = state_k_heads,
+            dropout = state_k_dropout
         )
         self.softmax = nn.Softmax(dim = -1)
 
     def forward(self, s, a):
-        s_emb = self.Embedding(s)
-        s_emb = self.PosEncoder(s_emb)
         a_emb = self.ActionSpace(a)
-        enc = self.Perceiver(s_emb, a_emb)
-
-        reward = repeat(self.reward, 'y x -> b y x', b = enc.size(0))
+        enc = self.Perceiver(a_emb, s)
+        reward = repeat(self.reward, 'x -> b y x', b = enc.size(0), y = 1)
         r = self.RewardNetwork(reward, enc)
         r = self.softmax(r)
 
-        state = repeat(self.state_k, 'y x -> b y x', b = enc.size(0))
+        state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
         s_k = self.StateNetwork(state, enc)
         s_k = self.softmax(s_k)
         return r, s_k

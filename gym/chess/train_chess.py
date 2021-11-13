@@ -96,7 +96,6 @@ class chess:
                         a_index = [(cy, cx, ny, nx) for cy, cx, ny, nx in zip(*np.where(a_map == 1))][0]
                         cur = f'{chess_game.x[a_index[1]]}{chess_game.y[a_index[0]]}'
                         next = f'{chess_game.x[a_index[3]]}{chess_game.y[a_index[2]]}'
-                        print(f'{cur}-->{next}')
 
                     valid = False
                     if chess_game.move(cur,next) == False:
@@ -140,7 +139,7 @@ class chess:
                     chess_game.p_move = chess_game.p_move * (-1)
             if end == True:
                 break
-        return state, game_train_data, a_colour
+        return state, game_train_data
 
     def legal_moves(self, chess_game):
         """

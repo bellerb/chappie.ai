@@ -1,12 +1,13 @@
 import torch
 import pandas as pd
 from copy import deepcopy
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 class Plumbing():
     def __init__(
         self,
-        folder='gym/chess/data',
-        filename='token_bank.csv'
+        folder = 'gym/chess/data',
+        filename = 'token_bank.csv'
     ):
         """
         Input: None
@@ -30,21 +31,27 @@ class Plumbing():
         Output: list containing integers representing a tokenized game board
         """
         temp_board = deepcopy(game.board)
-        for y,row in enumerate(temp_board):
-            for x,peice in enumerate(row):
-                if peice != 0:
-                    temp_board[y][x] = f'{self.notation[abs(peice)]}w' if peice > 0 else f'{self.notation[abs(peice)]}b'
+        for y, row in enumerate(temp_board):
+            for x, peice in enumerate(row):
+                if peice !=  0:
+                    if peice > 0:
+                        temp_board[y][x] = f'{self.notation[abs(peice)]}w'
+                    else:
+                        temp_board[y][x] = f'{self.notation[abs(peice)]}b'
                 else:
-                    temp_board[y][x] = 'PAD'
+                    temp_board[y][x] = 'mt'
         if len(temp_board) > 0:
             flat = [x for y in temp_board for x in y]
+            if game.p_move == 1:
+                flat.insert(0,'wm')
+            else:
+                flat.insert(0,'bm')
             result = [self.token_bank['token'].eq(t).idxmax() for t in flat]
-            result.insert(0, 1) if game.p_move == 1 else result.insert(0, 2)
         else:
             result = []
         return torch.tensor([result])
 
-    def multi_process(func, workers=None):
+    def multi_process(func, workers = None):
         """
         Input: func - list of dicitonary's containing the functions you want to run in parallel
         Description: run multiple funcitons in parallel
