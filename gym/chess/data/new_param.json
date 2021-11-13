@@ -3,13 +3,13 @@
     "user" : null,
     "c1" : 1.25,
     "c2" : 19652,
-    "d_a" : .3,
-    "e_f" : .25,
-    "g_d" : 1.,
+    "d_a" : 0.3,
+    "e_f" : 0.25,
+    "g_d" : 1.0,
     "Q_max" : 1,
-    "Q_min" : _1,
+    "Q_min" : -1,
     "sim_amt": 25,
-    "max_depth" : null,
+    "max_depth" : null
   },
   "representation": {
     "model_location":null,

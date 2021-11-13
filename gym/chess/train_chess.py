@@ -1,34 +1,49 @@
+'''
 import os
 import time
 import math
 import json
 import torch
+
+import pandas as pd
+
+from shutil import copyfile
+'''
+
 import random
+import numpy as np
 import pandas as pd
 from copy import deepcopy
-from shutil import copyfile
 
 from ai.bot import Agent
 from tasks.chess.chess import Chess
 from gym.chess.game_plumbing import Plumbing
 
-class train:
+class chess:
     """
     Reinforcement training for AI
     """
+    def __init__(self, train = False):
+        """
+        Input: train - boolean representing if the game is being played in training mode or not
+        Description: initalize chess game
+        Output: None
+        """
+        self.plumbing = Plumbing()
+        self.train = train
+
     def play_game(
+        self,
         game_name,
         epoch,
-        train = False,
         players = [
             'model-new.pth.tar',
-            'param':'model-active.pth.tar'
+            'model-active.pth.tar'
         ]
     ):
         """
         Input: game_name - string representing the game board name
                epoch - integer representing the current epoch
-               train - boolean representing the training control (Default=False) [OPTIONAL]
                white - string representing the file name for the white player (Default='model-active.pth.tar') [OPTIONAL]
                black - string representing the file name for the black player (Default='model-new.pth.tar') [OPTIONAL]
                search_amount - integer representing the amount of searches the ai's should perform (Default=50) [OPTIONAL]
@@ -37,6 +52,7 @@ class train:
         Description: Plays game for training
         Output: tuple containing game state, training data and which of the players won
         """
+        log = []
         human_code = [
             'h',
             'hum',
@@ -48,12 +64,11 @@ class train:
         chess_game = deepcopy(Chess()) #'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
         while True:
             for i, p in enumerate(players):
-                m_check = False
                 while True:
                     if str(p).lower() in human_code and len(log) < len(players):
-                        a_players[i] = 'human'
+                        a_players.append('human')
                     elif len(log) < len(players):
-                        a_players[i] = deepcopy(Agent(param_name = p, train = train)))
+                        a_players.append(deepcopy(Agent(param_name = p, train = self.train)))
                     if 'human' in a_players:
                         if chess_game.p_move == 1:
                             print('\nWhites Turn [UPPER CASE]\n')
@@ -64,24 +79,28 @@ class train:
                         cur = input('What piece do you want to move?\n')
                         next = input('Where do you want to move the piece to?\n')
                     else:
-                        if m_check == False:
-                            enc_state = Plumbing.encode_state(chess_game)
-                            u_bank = a_players[i].choose_action(enc_state)
-                        if train == True:
-                            pass #Add valid moves parser for training
-                        a_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
+                        enc_state = self.plumbing.encode_state(chess_game)
+                        #legal = self.legal_moves(chess_game) #Filter legal moves for inital state
+                        probs = a_players[i].choose_action(enc_state)
+                        probs = np.array(probs)
+                        probs[probs == 0] = 1e-8
+                        legal = self.legal_moves(chess_game) #Filter legal moves for inital state
+                        probs = np.multiply(legal, probs)
+                        probs = probs.tolist()
+                        max_prob = max(probs)
+                        a_bank = [j for j, v in enumerate(probs) if v == max_prob]
                         b_a = random.choice(a_bank)
                         a_map = np.zeros(4096)
                         a_map[b_a] = 1
                         a_map = a_map.reshape((8,8,8,8))
-                        a_index = [(cy, cx, ny, nx) for cy, cx, ny, nx in zip(*np.where(a_map == 1))]
-                        cur = f'{game.x[a_index[1]]}{game.y[a_index[0]]}'
-                        next = f'{game.x[a_index[3]]}{game.y[a_index[2]]}'
+                        a_index = [(cy, cx, ny, nx) for cy, cx, ny, nx in zip(*np.where(a_map == 1))][0]
+                        cur = f'{chess_game.x[a_index[1]]}{chess_game.y[a_index[0]]}'
+                        next = f'{chess_game.x[a_index[3]]}{chess_game.y[a_index[2]]}'
+                        print(f'{cur}-->{next}')
 
                     valid = False
                     if chess_game.move(cur,next) == False:
                         print('Invalid move')
-                        a[b_a] = float('-inf')
                     else:
                         valid = True
                         cur_pos = chess_game.board_2_array(cur)
@@ -121,7 +140,16 @@ class train:
                     chess_game.p_move = chess_game.p_move * (-1)
             if end == True:
                 break
-    return state, game_train_data, a_colour
+        return state, game_train_data, a_colour
+
+    def legal_moves(self, chess_game):
+        legal = np.zeros((8,8,8,8))
+        for cur,moves in chess_game.possible_board_moves(capture=True).items():
+            if len(moves) > 0 and ((cur[0].isupper() and chess_game.p_move == 1) or (cur[0].islower() and chess_game.p_move == -1)):
+                cur_pos = chess_game.board_2_array(cur)
+                for next in moves:
+                    legal[cur_pos[1]][cur_pos[0]][next[1]][next[0]] = 1.
+        return legal.flatten()
 
 if __name__ == '__main__':
     GAMES = 10 #Games to play on each board

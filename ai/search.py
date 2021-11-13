@@ -1,5 +1,6 @@
 import math
 import random
+from numpy.random import dirichlet
 
 class MCTS:
     """
@@ -77,7 +78,7 @@ class MCTS:
         Description: add dirichlet noise to probability distrabution
         Output: list of floats [0-1] representing action probability with added noise
         """
-        d = np.random.dirichlet([self.d_a] * len(p))
+        d = dirichlet([self.d_a] * len(p))
         return (d * self.e_f) + ((1 - self.e_f) * p)
 
     def pUCT(self, s):
@@ -87,13 +88,15 @@ class MCTS:
         Output: list containing pUCT values for all acitons
         """
         p_visits = sum([self.tree[(s, b)].N for b in range(self.f.action_space)]) #Sum of all potential nodes
+
         u_bank = {}
         for a in range(self.f.action_space):
             U = self.tree[(s, a)].P * ((p_visits**(0.5))/(1+self.tree[(s, a)].N)) #First part of exploration
             U *= self.c1 + (math.log((p_visits + (self.f.action_space * self.c2) + self.f.action_space) / self.c2)) #Second part of exploration
             Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
             u_bank[a] = Q_n + U
-        return u_bank
+        a_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
+        return random.choice(a_bank)
 
     def search(self, s, a = None, train = False):
         """
@@ -107,23 +110,22 @@ class MCTS:
         if (s_hash, a) not in self.tree:
             self.tree[(s_hash, a)] = self.Node() #Initialize new game tree node
         if a is not None:
-            r_k, s = self.g(s, a) #Reward and state prediction using dynamics function
+            r_k, s = self.g.predict(s, a) #Reward and state prediction using dynamics function
             self.tree[(s_hash, a)].R = r_k
         sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
         if self.tree[(s_hash, a)].N == 0:
-            v_k, p = self.f(s) #Value and policy prediction using prediction function
+            v_k, p = self.f.predict(s) #Value and policy prediction using prediction function
             if a is None and train == True:
                 p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
             self.tree[(s_hash, a)].Q = v_k
             #EXPANSION ---
             for a_k, p_a in enumerate(p):
-                self.tree[(sk_hash, a_k)] = self.Node()
+                if (sk_hash, a_k) not in self.tree:
+                    self.tree[(sk_hash, a_k)] = self.Node()
                 self.tree[(sk_hash, a_k)].P = p_a
             self.tree[(s_hash, a)].N += 1
             return self.tree[(s_hash, a)].Q
-        u_bank = self.pUCT(sk_hash) #Find best action to perform @ [sk]
-        a_bank = [k for k,v in u_bank.items() if v == max(u_bank.values())]
-        a_k = random.choice(a_bank)
+        a_k = self.pUCT(sk_hash) #Find best action to perform @ [sk]
         if self.depth < self.max_depth:
             self.depth += 1
             #BACKUP ---

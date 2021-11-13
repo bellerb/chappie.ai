@@ -1,7 +1,11 @@
-from ai.bot import Agent
-from games.chess.chess import Chess
+from gym.chess.train_chess import chess
 
-bot = Agent()
-
-
-bot.play_chess()
+chess = chess(train = True)
+chess.play_game(
+    'TEST',
+    0,
+    players = [
+        'gym/chess/data/active_param.json',
+        'human'
+    ]
+)

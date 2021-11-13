@@ -1,0 +1,34 @@
+index,token,description
+1,pw,white pawn
+2,nw,white knight
+3,bw,white bishop
+4,rw,white rook
+5,qw,white queen
+6,kw,white king
+7,pb,black pawn
+8,nb,black knight
+9,bb,black bishop
+10,rb,black rook
+11,qb,black queen
+12,kb,black king
+13,pwm,white pawn potential move
+14,nwm,white knight potential move
+15,bwm,white bishop potential move
+16,rwm,white rook potential move
+17,qwm,white queen potential move
+18,kwm,white king potential move
+19,pbm,black pawn potential move
+20,nbm,black knight potential move
+21,bbm,black bishop potential move
+22,rbm,black rook potential move
+23,qbm,black queen potential move
+24,kbm,black king potential move
+25,50m,fifty move rule
+26,3f,three fold rule
+27,qpm,queen pawn promotion
+28,npm,knight pawn promotion
+29,rpm,rook pawn promotion
+30,bpm,biship pawn promotion
+31,SEP,seperation token (SPECIAL)
+32,MASK,token used for masking (SPECIAL)
+33,PAD,token used for padding (SPECIAL)
