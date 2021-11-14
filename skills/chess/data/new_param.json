@@ -1,4 +1,12 @@
 {
+  "data": {
+    "token_bank":"skills/chess/data/token_bank.csv",
+    "active-models":{
+      "representation":"skills/chess/data/h_new.pth.tar",
+      "predictions":"skills/chess/data/f_new.pth.tar",
+      "dynamics":"skills/chess/data/g_new.pth.tar"
+    }
+  },
   "search":{
     "T": [
       [500000, 1],
@@ -50,5 +58,9 @@
     "policy_dropout":0.5,
     "reward_dropout":0.5,
     "state_k_dropout":0.5
+  },
+  "training": {
+    "bsz": 10,
+    "lr": 0.0001
   }
 }

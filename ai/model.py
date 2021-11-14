@@ -208,7 +208,7 @@ class Representation(nn.Module):
         self.PosEncoder = PositionalEncoding(
             embedding_size,
             encoder_dropout
-        ),
+        )
         self.Perceiver = Perceiver(
             embedding_size,
             self.latent.size(-1),
@@ -227,17 +227,91 @@ class Representation(nn.Module):
             heads = h_heads,
             dropout = h_dropout
         )
-        self.softmax = nn.Softmax(dim = -1)
 
     def forward(self, s):
         s_emb = self.Embedding(s)
-        #s_emb = self.PosEncoder(s_emb)
+        s_emb = self.PosEncoder(s_emb)
         latent = repeat(self.latent, 'y x -> b y x', b = s.size(0))
         enc = self.Perceiver(s_emb, latent)
         hidden = repeat(self.hidden, 'y x -> b y x', b = enc.size(0))
         h = self.HiddenNetwork(hidden, enc)
-        h = self.softmax(h)
         return h
+
+class Dynamics(nn.Module):
+    def __init__(
+        self,
+        state_size,
+        reward_size,
+        policy_size,
+        ntoken = 30,
+        action_space = 4096,
+        embedding_size = 64,
+        padding_idx = 29,
+        encoder_dropout = 0.5,
+        perceiver_inner = 64,
+        recursions = 1,
+        transformer_blocks = 1,
+        cross_heads = 1,
+        self_heads = 1,
+        cross_dropout = 0.5,
+        self_dropout = 0.5,
+        reward_inner = 64,
+        reward_heads = 1,
+        reward_dropout = 0.5,
+        state_k_inner = 64,
+        state_k_heads = 1,
+        state_k_dropout = 0.5
+    ):
+        super(Dynamics, self).__init__()
+        self.reward = nn.Parameter(torch.randn(reward_size))
+        self.state = nn.Parameter(torch.randn(state_size))
+        self.Embedding = nn.Embedding(
+            ntoken,
+            embedding_size,
+            padding_idx = padding_idx
+        )
+        self.ActionSpace = nn.Embedding(
+            action_space,
+            embedding_size
+        )
+        self.Perceiver = Perceiver(
+            state_size[-1],
+            embedding_size,
+            recursions = recursions,
+            transformer_blocks = transformer_blocks,
+            layer_size = perceiver_inner,
+            cross_heads = cross_heads,
+            self_heads = self_heads,
+            cross_dropout = cross_dropout,
+            self_dropout = self_dropout
+        )
+        self.RewardNetwork = Attention(
+            self.reward.size(-1),
+            layer_size = reward_inner,
+            context_size = embedding_size,
+            heads = reward_heads,
+            dropout = reward_dropout
+        )
+        self.StateNetwork = Attention(
+            self.state.size(-1),
+            layer_size = state_k_inner,
+            context_size = embedding_size,
+            heads = state_k_heads,
+            dropout = state_k_dropout
+        )
+        self.tanh = nn.Tanh()
+
+    def forward(self, s, a):
+        a_emb = self.ActionSpace(a)
+        enc = self.Perceiver(s, a_emb)
+
+        reward = repeat(self.reward, 'x -> b y x', b = enc.size(0), y = 1)
+        r = self.RewardNetwork(reward, enc)
+        r = self.tanh(r)
+
+        state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
+        s_k = self.StateNetwork(state, enc)
+        return r, s_k
 
 class Predictions(nn.Module):
     def __init__(
@@ -291,6 +365,7 @@ class Predictions(nn.Module):
             dropout = policy_dropout
         )
         self.softmax = nn.Softmax(dim = -1)
+        self.tanh = nn.Tanh()
 
     def forward(self, s):
         latent = repeat(self.latent, 'y x -> b y x', b = s.size(0))
@@ -298,89 +373,9 @@ class Predictions(nn.Module):
 
         value = repeat(self.value, 'x -> b y x', b = enc.size(0), y = 1)
         v = self.ValueNetwork(value, enc)
-        v = self.softmax(v)
+        v = self.tanh(v)
 
         policy = repeat(self.policy, 'x -> b y x', b = enc.size(0), y = 1)
         p = self.PolicyNetwork(policy, enc)
         p = self.softmax(p)
         return v, p
-
-class Dynamics(nn.Module):
-    def __init__(
-        self,
-        state_size,
-        reward_size,
-        policy_size,
-        ntoken = 30,
-        action_space = 4096,
-        embedding_size = 64,
-        padding_idx = 29,
-        encoder_dropout = 0.5,
-        perceiver_inner = 64,
-        recursions = 1,
-        transformer_blocks = 1,
-        cross_heads = 1,
-        self_heads = 1,
-        cross_dropout = 0.5,
-        self_dropout = 0.5,
-        reward_inner = 64,
-        reward_heads = 1,
-        reward_dropout = 0.5,
-        state_k_inner = 64,
-        state_k_heads = 1,
-        state_k_dropout = 0.5
-    ):
-        super(Dynamics, self).__init__()
-        self.reward = nn.Parameter(torch.randn(reward_size))
-        self.state = nn.Parameter(torch.randn(state_size))
-        self.Embedding = nn.Embedding(
-            ntoken,
-            embedding_size,
-            padding_idx = padding_idx
-        )
-        self.ActionSpace = nn.Embedding(
-            action_space,
-            embedding_size
-        )
-        self.PosEncoder = PositionalEncoding(
-            embedding_size,
-            encoder_dropout
-        )
-        self.Perceiver = Perceiver(
-            embedding_size,
-            state_size[-1],
-            recursions = recursions,
-            transformer_blocks = transformer_blocks,
-            layer_size = perceiver_inner,
-            cross_heads = cross_heads,
-            self_heads = self_heads,
-            cross_dropout = cross_dropout,
-            self_dropout = self_dropout
-        )
-        self.RewardNetwork = Attention(
-            self.reward.size(-1),
-            layer_size = reward_inner,
-            context_size = state_size[-1],
-            heads = reward_heads,
-            dropout = reward_dropout
-        )
-        self.StateNetwork = Attention(
-            self.state.size(-1),
-            layer_size = state_k_inner,
-            context_size = state_size[-1],
-            heads = state_k_heads,
-            dropout = state_k_dropout
-        )
-        self.softmax = nn.Softmax(dim = -1)
-
-    def forward(self, s, a):
-        a_emb = self.ActionSpace(a)
-        enc = self.Perceiver(a_emb, s)
-        reward = repeat(self.reward, 'x -> b y x', b = enc.size(0), y = 1)
-        r = self.RewardNetwork(reward, enc)
-        r = self.softmax(r)
-
-        state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
-        s_k = self.StateNetwork(state, enc)
-        s_k = self.softmax(s_k)
-        return r, s_k

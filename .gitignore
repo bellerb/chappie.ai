@@ -1,5 +1,5 @@
 __pycache__/
 .json
 .csv
-tasks/casino/
-tasks/chess/
+tasks/games/casino/
+tasks/games/chess/

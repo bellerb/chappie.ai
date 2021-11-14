@@ -6,8 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 class Plumbing():
     def __init__(
         self,
-        folder = 'gym/chess/data',
-        filename = 'token_bank.csv'
+        filename = 'skills/chess/data/token_bank.csv'
     ):
         """
         Input: None
@@ -22,7 +21,7 @@ class Plumbing():
             5 : 'q',
             6 : 'k'
         } #Map of notation to part number
-        self.token_bank = pd.read_csv(f'{folder}/{filename}') #All tokens
+        self.token_bank = pd.read_csv(filename) #All tokens
 
     def encode_state(self, game):
         """
