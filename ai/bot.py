@@ -152,7 +152,7 @@ class Agent:
             probs = [0] * len(counts)
             probs[a] = 1
         else:
-            c_s = sum(counts.values())
+            c_s = sum(c ** (1./self.T) for c in counts.values())
             probs = [(x ** (1./self.T)) / c_s for x in counts.values()]
         self.MCTS.tree = {}
         return probs, value
