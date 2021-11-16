@@ -44,7 +44,7 @@ class MCTS:
         self.g_d = g_d #Gamma discount
         self.Q_max = 1 #Max value
         self.Q_min = -1 #Min value
-        self.v_l = 0 #Last depth value
+        self.v_l = 0 #Last node value
         self.g = dynamics #Model used for dynamics
         self.f = prediction #Model used for prediction
         self.single_player = single_player #Control for if the task is single player or not
