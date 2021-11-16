@@ -36,6 +36,7 @@ class MCTS:
         """
         self.tree = {} #Game tree
         self.l = 0 #Last node depth
+        self.v_l = 0 #Last node value
         self.max_depth = max_depth #Max allowable depth
         self.c1 = c1 #Exploration hyper parameter 1
         self.c2 = c2 #Exploration hyper parameter 2
@@ -44,7 +45,6 @@ class MCTS:
         self.g_d = g_d #Gamma discount
         self.Q_max = 1 #Max value
         self.Q_min = -1 #Min value
-        self.v_l = 0 #Last node value
         self.g = dynamics #Model used for dynamics
         self.f = prediction #Model used for prediction
         self.single_player = single_player #Control for if the task is single player or not
@@ -149,7 +149,7 @@ class MCTS:
                 G = G_1 + G_k
             else:
                 G = 0
-            self.tree[(s_hash, a)].Q = (self.tree[(s_hash, a)].N * self.tree[(s_hash, a)].Q + G) / (self.tree[(s_hash, a)].N + 1) #Updated value
+            self.tree[(s_hash, a)].Q = ((self.tree[(s_hash, a)].N * self.tree[(s_hash, a)].Q) + G) / (self.tree[(s_hash, a)].N + 1) #Updated value
         if self.tree[(s_hash, a)].Q < self.Q_min:
             self.Q_min = self.tree[(s_hash, a)].Q
         if self.tree[(s_hash, a)].Q > self.Q_max:
