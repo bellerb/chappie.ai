@@ -18,8 +18,6 @@ class MCTS:
         d_a = .3,
         e_f = .25,
         g_d = 1.,
-        Q_max = 1,
-        Q_min = -1,
         single_player = False,
         max_depth = float('inf')
     ):
@@ -32,22 +30,21 @@ class MCTS:
                d_a = float representing the dirichlet alpha you wish to use (default = 0.3) [OPTIONAL]
                e_f = float representing the exploration fraction you wish to use with dirichlet alpha noise (default = 0.25) [OPTIONAL]
                g_d = float representing the gamma discount to apply to v_k+1 when backpropagating tree (default = 1) [OPTIONAL]
-               Q_max = float representing the max value (default = 1) [OPTIONAL]
-               Q_min = float representing the min value (default = -1) [OPTIONAL]
                max_depth - integer representing the max allowable depth to search tree (default = inf) [OPTIONAL]
         Description: MCTS initail variables
         Output: None
         """
         self.tree = {} #Game tree
-        self.depth = 0 #Curent node depth
+        self.l = 0 #Last node depth
         self.max_depth = max_depth #Max allowable depth
         self.c1 = c1 #Exploration hyper parameter 1
         self.c2 = c2 #Exploration hyper parameter 2
         self.d_a = d_a #Dirichlet alpha
         self.e_f = e_f #Exploration fraction
         self.g_d = g_d #Gamma discount
-        self.Q_max = Q_max #Max value
-        self.Q_min = Q_min #Min value
+        self.Q_max = 1 #Max value
+        self.Q_min = -1 #Min value
+        self.v_l = 0 #Last depth value
         self.g = dynamics #Model used for dynamics
         self.f = prediction #Model used for prediction
         self.single_player = single_player #Control for if the task is single player or not
@@ -129,32 +126,38 @@ class MCTS:
             s = self.tree[(s_hash, a_hash)].S
         sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
         if self.tree[(s_hash, a_hash)].N == 0:
+            #EXPANSION ---
             with torch.no_grad():
                 v_k, p = self.f(s) #Value and policy prediction using prediction function
             if a is None and train is True:
                 p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
             self.tree[(s_hash, a_hash)].Q = v_k.reshape(1).item()
-            #EXPANSION ---
+            self.v_l = self.tree[(s_hash, a_hash)].Q
             for a_k, p_a in enumerate(p.reshape(self.f.action_space)):
                 if (sk_hash, a_k) not in self.tree:
                     self.tree[(sk_hash, a_k)] = self.Node()
                 self.tree[(sk_hash, a_k)].P = p_a.item()
-            self.tree[(s_hash, a_hash)].N += 1
-            if self.single_player == True:
-                return self.tree[(s_hash, a_hash)].Q
-            else:
-                return -self.tree[(s_hash, a_hash)].Q
-        a_k = torch.tensor(self.pUCT(sk_hash)) #Find best action to perform @ [sk]
-        a_k = a_k.reshape((1,1))
-        if self.depth < self.max_depth:
-            self.depth += 1
+        elif self.l < self.max_depth:
+            a_k = torch.tensor(self.pUCT(sk_hash)) #Find best action to perform @ [sk]
+            a_k = a_k.reshape((1,1))
+            k = self.l
+            self.l += 1
             #BACKUP ---
-            g = self.tree[(s_hash, a_hash)].R + (self.g_d * self.search(s, a_k)) #Discounted value at current node
-            q_m = (self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q + g)
-            q_m /= (self.tree[(s_hash, a_hash)].N + 1) #Mean value
-            self.tree[(s_hash, a_hash)].Q = q_m
+            G_1, r_1 = self.search(s, a_k) #Go level deeper
+            if (self.l - k - 1) > 0:
+                G_k = ((self.g_d ** (self.l - k - 1)) * r_1) + ((self.g_d ** (self.l - k)) * self.v_l)
+                G = G_1 + G_k
+            else:
+                G = 0
+            self.tree[(s_hash, a)].Q = (self.tree[(s_hash, a)].N * self.tree[(s_hash, a)].Q + G) / (self.tree[(s_hash, a)].N + 1) #Updated value
+        if self.tree[(s_hash, a)].Q < self.Q_min:
+            self.Q_min = self.tree[(s_hash, a)].Q
+        if self.tree[(s_hash, a)].Q > self.Q_max:
+            self.Q_max = self.tree[(s_hash, a)].Q
         self.tree[(s_hash, a_hash)].N += 1
+        if 'G' not in locals():
+            G = 0
         if self.single_player == True:
-            return self.tree[(s_hash, a_hash)].Q
+            return G, self.tree[(s_hash, a)].R
         else:
-            return -self.tree[(s_hash, a_hash)].Q
+            return G, -self.tree[(s_hash, a)].R
