@@ -307,7 +307,6 @@ class Dynamics(nn.Module):
 
         reward = repeat(self.reward, 'x -> b y x', b = enc.size(0), y = 1)
         r = self.RewardNetwork(reward, enc)
-        r = self.tanh(r)
 
         state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
         s_k = self.StateNetwork(state, enc)

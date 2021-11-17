@@ -13,14 +13,12 @@
       [750000, 0.5],
       [1000000, 0.25]
     ],
-    "sim_amt": 5,
+    "sim_amt": 25,
     "c1":1.25,
     "c2":19652,
     "d_a":0.3,
     "e_f":0.25,
     "g_d":1.0,
-    "Q_max":1,
-    "Q_min":-1,
     "max_depth":null,
     "single_player": false
   },

@@ -51,6 +51,7 @@ class chess:
         game_name,
         epoch,
         train = False,
+        EPD = None,
         players = [
             'skills/chess/data/active_param.json',
             'human'
@@ -76,7 +77,10 @@ class chess:
         end = False
         a_players = []
         plumbing = Plumbing()
-        chess_game = deepcopy(Chess()) #'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
+        if EPD is None:
+            chess_game = deepcopy(Chess()) #'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
+        else:
+            chess_game = deepcopy(Chess(EPD=EPD)) #'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
         while True:
             for i, p in enumerate(players):
                 while True:
@@ -90,11 +94,11 @@ class chess:
                         else:
                             print('\nBlacks Turn [LOWER CASE]\n')
                         chess_game.display()
+                    enc_state = plumbing.encode_state(chess_game)
                     if a_players[i] == 'human':
                         cur = input('What piece do you want to move?\n')
                         next = input('Where do you want to move the piece to?\n')
                     else:
-                        enc_state = plumbing.encode_state(chess_game)
                         #legal = self.legal_moves(chess_game) #Filter legal moves for inital state
                         probs, v = a_players[i].choose_action(enc_state)
                         print(v)
@@ -105,6 +109,7 @@ class chess:
                         probs = np.multiply(legal, probs)
                         probs = probs.tolist()
                         max_prob = max(probs)
+                        print(max_prob)
                         a_bank = [j for j, v in enumerate(probs) if v == max_prob]
                         b_a = random.choice(a_bank)
                         a_map = np.zeros(4096)
@@ -167,6 +172,7 @@ class chess:
         games = 10,
         boards = 1,
         best_of = 5,
+        EPD = None,
         players = [
             {
                 'param':'skills/chess/data/active_param.json',
@@ -199,6 +205,7 @@ class chess:
                 'TEST',
                 epoch,
                 train = True,
+                EPD = EPD,
                 players = a_players
             )
             if state == [1,0,0]:
@@ -228,6 +235,7 @@ class chess:
                 train_data['value'] = np.where(train_data['state0'] == 0., 1., -1.)
             else:
                 train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
+            train_data['reward'] = [0.] * len(train_data)
             for m in t_bank:
                 Agent(param_name = m, train = False).train(train_data)
             train_data = pd.DataFrame()

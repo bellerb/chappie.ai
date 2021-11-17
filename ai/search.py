@@ -149,15 +149,15 @@ class MCTS:
                 G = G_1 + G_k
             else:
                 G = 0
-            self.tree[(s_hash, a)].Q = ((self.tree[(s_hash, a)].N * self.tree[(s_hash, a)].Q) + G) / (self.tree[(s_hash, a)].N + 1) #Updated value
-        if self.tree[(s_hash, a)].Q < self.Q_min:
-            self.Q_min = self.tree[(s_hash, a)].Q
-        if self.tree[(s_hash, a)].Q > self.Q_max:
-            self.Q_max = self.tree[(s_hash, a)].Q
+            self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1) #Updated value
+        if self.tree[(s_hash, a_hash)].Q < self.Q_min:
+            self.Q_min = self.tree[(s_hash, a_hash)].Q
+        if self.tree[(s_hash, a_hash)].Q > self.Q_max:
+            self.Q_max = self.tree[(s_hash, a_hash)].Q
         self.tree[(s_hash, a_hash)].N += 1
         if 'G' not in locals():
             G = 0
         if self.single_player == True:
-            return G, self.tree[(s_hash, a)].R
+            return G, self.tree[(s_hash, a_hash)].R
         else:
-            return G, -self.tree[(s_hash, a)].R
+            return G, -self.tree[(s_hash, a_hash)].R

@@ -120,8 +120,6 @@ class Agent:
             d_a = m_param['search']['d_a'],
             e_f = m_param['search']['e_f'],
             g_d = m_param['search']['g_d'],
-            Q_max = m_param['search']['Q_max'],
-            Q_min = m_param['search']['Q_min'],
             single_player = m_param['search']['single_player'],
             max_depth = m_d
         )
@@ -159,8 +157,8 @@ class Agent:
 
     def train(self, data):
         #Initailize training
-        v_criterion = torch.nn.MSELoss() #Mean squared error loss
-        p_criterion = torch.nn.BCELoss() #Binary cross entropy loss
+        mse = torch.nn.MSELoss() #Mean squared error loss
+        bce = torch.nn.BCELoss() #Binary cross entropy loss
         h_optimizer = torch.optim.SGD(
             self.m_weights['representation']['model'].parameters(),
             lr=self.lr
@@ -183,14 +181,20 @@ class Agent:
         total_loss = 0.0
         start_time = time.time() #Get time of starting process
         for batch, i in enumerate(range(0, train_data.size(0) - 1, self.bsz)):
-            state, v_targets, p_targets = self.get_batch(train_data, i, self.bsz) #Get batch data with the selected targets being masked
+            state, s_targets, p_targets, v_targets, r_targets = self.get_batch(train_data, i, self.bsz) #Get batch data with the selected targets being masked
             h = self.m_weights['representation']['model'](state)
             v, p = self.m_weights['predictions']['model'](h)
+            a = rearrange(torch.argmax(p_targets, dim = -1), '(y x) -> y x', x = 1)
+            r, s = self.m_weights['dynamics']['model'](h, a)
             v = rearrange(v, 'b y x -> b (y x)')
             p = rearrange(p, 'b y x -> b (y x)')
-            v_loss = v_criterion(v, v_targets) #Apply loss function to results
-            p_loss = p_criterion(p, p_targets) #Apply loss function to results
-            loss = v_loss + p_loss
+            r = rearrange(r, 'b y x -> b (y x)')
+            s_h = self.m_weights['representation']['model'](s_targets)
+            v_loss = mse(v, v_targets) #Apply loss function to results
+            p_loss = bce(p, p_targets) #Apply loss function to results
+            r_loss = mse(r, r_targets) #Apply loss function to results
+            s_loss = mse(s, s_h) #Apply loss function to results
+            loss = v_loss + p_loss + r_loss + s_loss
             loss.backward() #Backpropegate through model
             torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
             torch.nn.utils.clip_grad_norm_(self.m_weights['predictions']['model'].parameters(), 0.5)
@@ -213,23 +217,32 @@ class Agent:
                x - integer representing the index of the data you wish to gather
                y - integer representing the amount of rows you want to grab
         Description: Generate input and target data for training model
-        Output: list of pytorch tensors containing input and target data [x,y]
+        Output: tuple of pytorch tensors containing input and target data [x, p, v, r]
         """
         data = torch.tensor([])
         v_target = torch.tensor([])
+        r_target = torch.tensor([])
         p_target = torch.tensor([])
+        s_target = torch.tensor([])
         for i in range(y):
-            #Training data
-            if len(source) > 0 and x+i < len(source):
-                d_seq = source[x+i][:len(source[x+i])-(self.action_space+1)]
+            if len(source) > 0 and x + i < len(source):
+                d_seq = source[x + i][:len(source[x + i]) - (self.action_space + 2)]
                 data = torch.cat((data, d_seq))
-                #Target data
-                v_seq = source[x+i][-1].reshape(1)
+                if x + i < len(source) - 1:
+                    s_seq = source[x + i + 1][:len(source[x + i + 1]) - (self.action_space + 2)]
+                else:
+                    s_seq = source[x + i][:len(source[x + i]) - (self.action_space + 2)]
+                s_target = torch.cat((s_target, s_seq))
+                v_seq = source[x + i][-2].reshape(1)
                 v_target = torch.cat((v_target, v_seq))
-                p_seq = source[x+i][-(self.action_space+1):-1]
+                r_seq = source[x + i][-1].reshape(1)
+                r_target = torch.cat((r_target, r_seq))
+                p_seq = source[x + i][-(self.action_space + 2):-2]
                 p_target = torch.cat((p_target, p_seq))
         return (
-            data.reshape(min(y, len(source[x:])),len(source[0])-(self.action_space+1)).to(torch.int64),
+            data.reshape(min(y, len(source[x:])), len(source[0]) - (self.action_space + 2)).to(torch.int64),
+            s_target.reshape(min(y, len(source[x:])), len(source[0]) - (self.action_space + 2)).to(torch.int64),
+            p_target.reshape(min(y, len(source[x:])), self.action_space).to(torch.float),
             v_target.reshape(min(y, len(source[x:])), 1).to(torch.float),
-            p_target.reshape(min(y, len(source[x:])), self.action_space).to(torch.float)
+            r_target.reshape(min(y, len(source[x:])), 1).to(torch.float)
         )
