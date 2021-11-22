@@ -200,17 +200,17 @@ class Agent:
         self.m_weights['reward']['model'].train() #Turn on the train mode
         train_data = torch.tensor(data.values) #Set training data to a tensor
         #Start training model
-        t_steps = 0
-        total_loss = {
-            'hidden loss':0.,
-            'dynamics loss':0.,
-            'value loss':0.,
-            'policy loss':0.,
-            'state loss':0,
-            'reward loss':0.
-        }
         start_time = time.time() #Get time of starting process
         for epoch in range(self.epoch):
+            t_steps = 0
+            total_loss = {
+                'hidden loss':0.,
+                'dynamics loss':0.,
+                'value loss':0.,
+                'policy loss':0.,
+                'state loss':0,
+                'reward loss':0.
+            }
             for batch, i in enumerate(range(0, train_data.size(0) - 1, self.bsz)):
                 state, s_targets, p_targets, v_targets, r_targets = self.get_batch(train_data, i, self.bsz) #Get batch data with the selected targets being masked
                 h = self.m_weights['representation']['model'](state)
@@ -334,4 +334,5 @@ class Agent:
             v_target.reshape(min(y, len(source[x:])), 1).to(torch.float),
             r_target.reshape(min(y, len(source[x:])), 1).to(torch.float)
         )
+
 
