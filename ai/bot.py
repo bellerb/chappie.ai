@@ -8,6 +8,7 @@ import numpy as np
 from tqdm import tqdm
 
 from einops import rearrange
+from datetime import datetime
 
 from ai.search import MCTS
 from ai.model import Representation, Dynamics, Value, Policy, NextState, Reward
@@ -292,7 +293,9 @@ class Agent:
             torch.save({
                 'state_dict': self.m_weights[m]['model'].state_dict(),
             }, self.m_weights[m]['param'])
+        t_log = {**{'Date':datetime.now(),'Samples':train_data.size(0),'Time':time.time() - start_time},**{k:(v/t_steps) for k,v in total_loss.items()}}
         print(f'{time.time() - start_time} ms | {train_data.size(0)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}')
+        return t_log
 
     def get_batch(self, source, x, y):
         """
@@ -329,3 +332,4 @@ class Agent:
             v_target.reshape(min(y, len(source[x:])), 1).to(torch.float),
             r_target.reshape(min(y, len(source[x:])), 1).to(torch.float)
         )
+
