@@ -3,8 +3,11 @@
     "token_bank":"skills/chess/data/token_bank.csv",
     "active-models":{
       "representation":"skills/chess/data/h_new.pth.tar",
-      "predictions":"skills/chess/data/f_new.pth.tar",
-      "dynamics":"skills/chess/data/g_new.pth.tar"
+      "dynamics":"skills/chess/data/g_new.pth.tar",
+      "value":"skills/chess/data/v_new.pth.tar",
+      "policy":"skills/chess/data/p_new.pth.tar",
+      "state":"skills/chess/data/s_new.pth.tar",
+      "reward":"skills/chess/data/r_new.pth.tar"
     }
   },
   "search":{

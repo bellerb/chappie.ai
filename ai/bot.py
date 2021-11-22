@@ -10,7 +10,7 @@ from tqdm import tqdm
 from einops import rearrange
 
 from ai.search import MCTS
-from ai.model import Representation, Predictions, Dynamics
+from ai.model import Representation, Dynamics, Value, Policy, NextState, Reward
 
 class Agent:
     def __init__(self, param_name='model_param.json', train = False):
@@ -25,79 +25,84 @@ class Agent:
         p_model = m_param['model']
         representation = Representation(
             p_model['latent_size'],
-            p_model['h_size'],
             ntoken = p_model['ntoken'],
             embedding_size = p_model['embedding_size'],
             padding_idx = p_model['padding_idx'],
             encoder_dropout = p_model['encoder_dropout'],
-            perceiver_inner = p_model['perceiver_inner'],
-            recursions = p_model['h_recursions'],
-            transformer_blocks = p_model['transformer_blocks'],
-            cross_heads = p_model['cross_heads'],
-            self_heads = p_model['self_heads'],
-            cross_dropout = p_model['cross_dropout'],
-            self_dropout = p_model['self_dropout'],
             h_inner = p_model['h_inner'],
             h_heads = p_model['h_heads'],
             h_dropout = p_model['h_dropout']
         ).to(self.Device)
         representation.eval()
-        predictions = Predictions(
-            p_model['h_size'],
-            p_model['latent_size'],
-            p_model['value_size'],
-            p_model['action_space'],
-            perceiver_inner = p_model['perceiver_inner'],
-            recursions = p_model['f_recursions'],
-            transformer_blocks = p_model['transformer_blocks'],
-            cross_heads = p_model['cross_heads'],
-            self_heads = p_model['self_heads'],
-            cross_dropout = p_model['cross_dropout'],
-            self_dropout = p_model['self_dropout'],
-            value_inner = p_model['value_inner'],
-            value_heads = p_model['value_heads'],
-            value_dropout = p_model['value_dropout'],
-            policy_inner = p_model['policy_inner'],
-            policy_heads = p_model['policy_heads'],
-            policy_dropout = p_model['policy_dropout']
-        ).to(self.Device)
-        predictions.eval()
         dynamics = Dynamics(
-            p_model['h_size'],
-            p_model['reward_size'],
-            p_model['action_space'],
-            ntoken = p_model['ntoken'],
+            p_model['latent_size'],
             action_space = p_model['action_space'],
             embedding_size = p_model['embedding_size'],
-            padding_idx = p_model['padding_idx'],
-            encoder_dropout = p_model['encoder_dropout'],
             perceiver_inner = p_model['perceiver_inner'],
             recursions = p_model['g_recursions'],
             transformer_blocks = p_model['transformer_blocks'],
             cross_heads = p_model['cross_heads'],
             self_heads = p_model['self_heads'],
             cross_dropout = p_model['cross_dropout'],
-            self_dropout = p_model['self_dropout'],
-            reward_inner = p_model['reward_inner'],
-            reward_heads = p_model['reward_heads'],
-            reward_dropout = p_model['reward_dropout'],
+            self_dropout = p_model['self_dropout']
+        ).to(self.Device)
+        dynamics.eval()
+        policy = Policy(
+            p_model['action_space'],
+            p_model['latent_size'],
+            policy_inner = p_model['policy_inner'],
+            policy_heads = p_model['policy_heads'],
+            policy_dropout = p_model['policy_dropout']
+        ).to(self.Device)
+        policy.eval()
+        value = Value(
+            p_model['value_size'],
+            p_model['latent_size'],
+            value_inner = p_model['value_inner'],
+            value_heads = p_model['value_heads'],
+            value_dropout = p_model['value_dropout']
+        ).to(self.Device)
+        value.eval()
+        state = NextState(
+            p_model['latent_size'],
+            p_model['latent_size'],
             state_k_inner = p_model['state_k_inner'],
             state_k_heads = p_model['state_k_heads'],
             state_k_dropout = p_model['state_k_dropout']
         ).to(self.Device)
-        dynamics.eval()
+        state.eval()
+        reward = Reward(
+            p_model['reward_size'],
+            p_model['latent_size'],
+            reward_inner = p_model['reward_inner'],
+            reward_heads = p_model['reward_heads'],
+            reward_dropout = p_model['reward_dropout']
+        ).to(self.Device)
+        reward.eval()
         self.m_weights = {
             'representation':{
                 'model':representation,
                 'param':m_param['data']['active-models']['representation']
             },
-            'predictions':{
-                'model':predictions,
-                'param':m_param['data']['active-models']['predictions']
-            },
             'dynamics':{
                 'model':dynamics,
                 'param':m_param['data']['active-models']['dynamics']
+            },
+            'value':{
+                'model':value,
+                'param':m_param['data']['active-models']['value']
+            },
+            'policy':{
+                'model':policy,
+                'param':m_param['data']['active-models']['policy']
+            },
+            'state':{
+                'model':state,
+                'param':m_param['data']['active-models']['state']
+            },
+            'reward':{
+                'model':reward,
+                'param':m_param['data']['active-models']['reward']
             }
         }
         for m in self.m_weights:
@@ -113,9 +118,11 @@ class Agent:
         else:
             m_d = m_param['search']['max_depth']
         self.MCTS = MCTS(
-            self.m_weights['predictions']['model'],
             self.m_weights['dynamics']['model'],
-            c1 = m_param['search']['c1'],
+            self.m_weights['value']['model'],
+            self.m_weights['policy']['model'],
+            self.m_weights['state']['model'],
+            self.m_weights['reward']['model'],
             c2 = m_param['search']['c2'],
             d_a = m_param['search']['d_a'],
             e_f = m_param['search']['e_f'],
@@ -136,11 +143,11 @@ class Agent:
     def choose_action(self, state):
         with torch.no_grad():
             h_s = self.m_weights['representation']['model'](state)
+            d = self.m_weights['dynamics']['model'](h_s, torch.tensor([[0]])) #dynamics function
         for _ in tqdm(range(self.sim_amt),desc='MCTS'):
             self.MCTS.depth = 0
-            self.MCTS.search(h_s, train = self.train_control)
-
-        s_hash = self.MCTS.state_hash(h_s)
+            self.MCTS.search(d, train = self.train_control)
+        s_hash = self.MCTS.state_hash(d)
         value = self.MCTS.tree[(s_hash, None)].Q
         counts = {a: self.MCTS.tree[(s_hash,a)].N for a in range(self.action_space)}
 
@@ -163,53 +170,129 @@ class Agent:
             self.m_weights['representation']['model'].parameters(),
             lr=self.lr
         ) #Optimization algorithm using stochastic gradient descent
-        f_optimizer = torch.optim.SGD(
-            self.m_weights['predictions']['model'].parameters(),
-            lr=self.lr
-        ) #Optimization algorithm using stochastic gradient descent
         g_optimizer = torch.optim.SGD(
             self.m_weights['dynamics']['model'].parameters(),
             lr=self.lr
         ) #Optimization algorithm using stochastic gradient descent
+        v_optimizer = torch.optim.SGD(
+            self.m_weights['value']['model'].parameters(),
+            lr=self.lr
+        ) #Optimization algorithm using stochastic gradient descent
+        p_optimizer = torch.optim.SGD(
+            self.m_weights['policy']['model'].parameters(),
+            lr=self.lr
+        ) #Optimization algorithm using stochastic gradient descent
+        s_optimizer = torch.optim.SGD(
+            self.m_weights['state']['model'].parameters(),
+            lr=self.lr
+        ) #Optimization algorithm using stochastic gradient descent
+        r_optimizer = torch.optim.SGD(
+            self.m_weights['reward']['model'].parameters(),
+            lr=self.lr
+        ) #Optimization algorithm using stochastic gradient descent
         self.m_weights['representation']['model'].train() #Turn on the train mode
-        self.m_weights['predictions']['model'].train() #Turn on the train mode
         self.m_weights['dynamics']['model'].train() #Turn on the train mode
-        #train_data = train_data.sample(frac=1).reset_index(drop=True) #Shuffle training data
+        self.m_weights['value']['model'].train() #Turn on the train mode
+        self.m_weights['policy']['model'].train() #Turn on the train mode
+        self.m_weights['state']['model'].train() #Turn on the train mode
+        self.m_weights['reward']['model'].train() #Turn on the train mode
         train_data = torch.tensor(data.values) #Set training data to a tensor
         #Start training model
         t_steps = 0
-        total_loss = 0.0
+        total_loss = {
+            'hidden loss':0.,
+            'dynamics loss':0.,
+            'value loss':0.,
+            'policy loss':0.,
+            'state loss':0,
+            'reward loss':0.
+        }
         start_time = time.time() #Get time of starting process
         for batch, i in enumerate(range(0, train_data.size(0) - 1, self.bsz)):
             state, s_targets, p_targets, v_targets, r_targets = self.get_batch(train_data, i, self.bsz) #Get batch data with the selected targets being masked
             h = self.m_weights['representation']['model'](state)
-            v, p = self.m_weights['predictions']['model'](h)
-            a = rearrange(torch.argmax(p_targets, dim = -1), '(y x) -> y x', x = 1)
-            r, s = self.m_weights['dynamics']['model'](h, a)
+
+            a = torch.argmax(p_targets, dim = -1)
+            for j in range(a.size(-1)-1):
+                a[len(a) - j - 1] = a[len(a) - j - 2]
+            a[0] = 0
+            a = rearrange(a, '(y x) -> y x ', x = 1)
+
+            d = self.m_weights['dynamics']['model'](h, a)
+            v = self.m_weights['value']['model'](d)
+            p = self.m_weights['policy']['model'](d)
+            s = self.m_weights['state']['model'](d)
+            r = self.m_weights['reward']['model'](d)
+            s_h = self.m_weights['representation']['model'](s_targets)
+
             v = rearrange(v, 'b y x -> b (y x)')
             p = rearrange(p, 'b y x -> b (y x)')
             r = rearrange(r, 'b y x -> b (y x)')
-            s_h = self.m_weights['representation']['model'](s_targets)
+
             v_loss = mse(v, v_targets) #Apply loss function to results
             p_loss = bce(p, p_targets) #Apply loss function to results
             r_loss = mse(r, r_targets) #Apply loss function to results
             s_loss = mse(s, s_h) #Apply loss function to results
-            loss = v_loss + p_loss + r_loss + s_loss
-            loss.backward() #Backpropegate through model
+            h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
+            d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+
+            h_optimizer.zero_grad()
+            total_loss['hidden loss'] += h_loss.item()
+            h_loss.backward(
+                retain_graph = True,
+                inputs = list(self.m_weights['representation']['model'].parameters())
+            ) #Backpropegate through model
             torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
-            torch.nn.utils.clip_grad_norm_(self.m_weights['predictions']['model'].parameters(), 0.5)
-            torch.nn.utils.clip_grad_norm_(self.m_weights['dynamics']['model'].parameters(), 0.5)
             h_optimizer.step()
-            f_optimizer.step()
+
+            total_loss['dynamics loss'] += d_loss.item()
+            g_optimizer.zero_grad()
+            d_loss.backward(
+                retain_graph = True,
+                inputs = list(self.m_weights['dynamics']['model'].parameters())
+            ) #Backpropegate through model
+            torch.nn.utils.clip_grad_norm_(self.m_weights['dynamics']['model'].parameters(), 0.5)
             g_optimizer.step()
-            total_loss += loss.item() #Increment total loss
+
+            total_loss['value loss'] += v_loss.item()
+            v_optimizer.zero_grad()
+            v_loss.backward(
+                inputs = list(self.m_weights['value']['model'].parameters())
+            ) #Backpropegate through model
+            torch.nn.utils.clip_grad_norm_(self.m_weights['value']['model'].parameters(), 0.5)
+            v_optimizer.step()
+
+            total_loss['policy loss'] += p_loss.item()
+            p_optimizer.zero_grad()
+            p_loss.backward(
+                inputs = list(self.m_weights['policy']['model'].parameters())
+            ) #Backpropegate through model
+            torch.nn.utils.clip_grad_norm_(self.m_weights['policy']['model'].parameters(), 0.5)
+            p_optimizer.step()
+
+            total_loss['state loss'] += s_loss.item()
+            s_optimizer.zero_grad()
+            s_loss.backward(
+                inputs = list(self.m_weights['state']['model'].parameters())
+            ) #Backpropegate through model
+            torch.nn.utils.clip_grad_norm_(self.m_weights['state']['model'].parameters(), 0.5)
+            s_optimizer.step()
+
+            total_loss['reward loss'] += r_loss.item()
+            r_optimizer.zero_grad()
+            r_loss.backward(
+                inputs = list(self.m_weights['reward']['model'].parameters())
+            ) #Backpropegate through model
+            torch.nn.utils.clip_grad_norm_(self.m_weights['reward']['model'].parameters(), 0.5)
+            r_optimizer.step()
+
             t_steps += 1
         #Updated new model
         for m in self.m_weights:
             torch.save({
                 'state_dict': self.m_weights[m]['model'].state_dict(),
             }, self.m_weights[m]['param'])
-        print(f'{time.time() - start_time} ms | {train_data.size(0)} samples | {total_loss / t_steps} loss\n')
+        print(f'{time.time() - start_time} ms | {train_data.size(0)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}')
 
     def get_batch(self, source, x, y):
         """

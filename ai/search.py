@@ -10,8 +10,11 @@ class MCTS:
     """
     def __init__(
         self,
-        prediction,
         dynamics,
+        value,
+        policy,
+        state,
+        reward,
         user = None,
         c1 = 1.25,
         c2 = 19652,
@@ -46,7 +49,10 @@ class MCTS:
         self.Q_max = 1 #Max value
         self.Q_min = -1 #Min value
         self.g = dynamics #Model used for dynamics
-        self.f = prediction #Model used for prediction
+        self.v = value #Model used for value
+        self.p = policy #Model used for policy
+        self.s = state #Model used for state
+        self.r = reward #Model used for reward
         self.single_player = single_player #Control for if the task is single player or not
 
     class Node:
@@ -89,12 +95,12 @@ class MCTS:
         Description: return best action state using polynomial upper confidence trees
         Output: list containing pUCT values for all acitons
         """
-        p_visits = sum([self.tree[(s, b)].N for b in range(self.f.action_space)]) #Sum of all potential nodes
+        p_visits = sum([self.tree[(s, b)].N for b in range(self.p.action_space)]) #Sum of all potential nodes
 
         u_bank = {}
-        for a in range(self.f.action_space):
+        for a in range(self.p.action_space):
             U = self.tree[(s, a)].P * ((p_visits**(0.5))/(1+self.tree[(s, a)].N)) #First part of exploration
-            U *= self.c1 + (math.log((p_visits + (self.f.action_space * self.c2) + self.f.action_space) / self.c2)) #Second part of exploration
+            U *= self.c1 + (math.log((p_visits + (self.p.action_space * self.c2) + self.p.action_space) / self.c2)) #Second part of exploration
             Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
             u_bank[a] = Q_n + U
         m_u = max(u_bank.values())
@@ -118,22 +124,27 @@ class MCTS:
             self.tree[(s_hash, a_hash)] = self.Node() #Initialize new game tree node
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
-                r_k, s_k = self.g(s, a) #Reward and state prediction using dynamics function
+                d_k = self.g(s, a + 1) #dynamics function
+                #print('d',d_k.size())
+                r_k = self.r(d_k) #reward function
+                s_k = self.s(d_k) #next state function
+                #print('s',s_k.size())
             s = s_k.reshape(s.size())
             self.tree[(s_hash, a_hash)].S = s
             self.tree[(s_hash, a_hash)].R = r_k.reshape(1).item()
         elif a is not None and self.tree[(s_hash, a_hash)].S is not None:
-            s = self.tree[(s_hash, a_hash)].S
+            d = self.tree[(s_hash, a_hash)].S
         sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
         if self.tree[(s_hash, a_hash)].N == 0:
             #EXPANSION ---
             with torch.no_grad():
-                v_k, p = self.f(s) #Value and policy prediction using prediction function
+                v_k = self.v(s) #value function
+                p = self.p(s) #policy function
             if a is None and train is True:
                 p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
             self.tree[(s_hash, a_hash)].Q = v_k.reshape(1).item()
             self.v_l = self.tree[(s_hash, a_hash)].Q
-            for a_k, p_a in enumerate(p.reshape(self.f.action_space)):
+            for a_k, p_a in enumerate(p.reshape(self.p.action_space)):
                 if (sk_hash, a_k) not in self.tree:
                     self.tree[(sk_hash, a_k)] = self.Node()
                 self.tree[(sk_hash, a_k)].P = p_a.item()
