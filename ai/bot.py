@@ -140,6 +140,7 @@ class Agent:
         self.sim_amt = m_param['search']['sim_amt']
         self.bsz = m_param['training']['bsz'] #Batch size
         self.lr = m_param['training']['lr'] #Learning rate
+        self.epoch = m_param['training']['epoch'] #Training epochs
 
     def choose_action(self, state):
         with torch.no_grad():
@@ -209,92 +210,93 @@ class Agent:
             'reward loss':0.
         }
         start_time = time.time() #Get time of starting process
-        for batch, i in enumerate(range(0, train_data.size(0) - 1, self.bsz)):
-            state, s_targets, p_targets, v_targets, r_targets = self.get_batch(train_data, i, self.bsz) #Get batch data with the selected targets being masked
-            h = self.m_weights['representation']['model'](state)
+        for epoch in range(self.epoch):
+            for batch, i in enumerate(range(0, train_data.size(0) - 1, self.bsz)):
+                state, s_targets, p_targets, v_targets, r_targets = self.get_batch(train_data, i, self.bsz) #Get batch data with the selected targets being masked
+                h = self.m_weights['representation']['model'](state)
 
-            a = torch.argmax(p_targets, dim = -1)
-            for j in range(a.size(-1)-1):
-                a[len(a) - j - 1] = a[len(a) - j - 2]
-            a[0] = 0
-            a = rearrange(a, '(y x) -> y x ', x = 1)
+                a = torch.argmax(p_targets, dim = -1)
+                for j in range(a.size(-1)-1):
+                    a[len(a) - j - 1] = a[len(a) - j - 2]
+                a[0] = 0
+                a = rearrange(a, '(y x) -> y x ', x = 1)
 
-            d = self.m_weights['dynamics']['model'](h, a)
-            v = self.m_weights['value']['model'](d)
-            p = self.m_weights['policy']['model'](d)
-            s = self.m_weights['state']['model'](d)
-            r = self.m_weights['reward']['model'](d)
-            s_h = self.m_weights['representation']['model'](s_targets)
+                d = self.m_weights['dynamics']['model'](h, a)
+                v = self.m_weights['value']['model'](d)
+                p = self.m_weights['policy']['model'](d)
+                s = self.m_weights['state']['model'](d)
+                r = self.m_weights['reward']['model'](d)
+                s_h = self.m_weights['representation']['model'](s_targets)
 
-            v = rearrange(v, 'b y x -> b (y x)')
-            p = rearrange(p, 'b y x -> b (y x)')
-            r = rearrange(r, 'b y x -> b (y x)')
+                v = rearrange(v, 'b y x -> b (y x)')
+                p = rearrange(p, 'b y x -> b (y x)')
+                r = rearrange(r, 'b y x -> b (y x)')
 
-            v_loss = mse(v, v_targets) #Apply loss function to results
-            p_loss = bce(p, p_targets) #Apply loss function to results
-            r_loss = mse(r, r_targets) #Apply loss function to results
-            s_loss = mse(s, s_h) #Apply loss function to results
-            h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
-            d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+                v_loss = mse(v, v_targets) #Apply loss function to results
+                p_loss = bce(p, p_targets) #Apply loss function to results
+                r_loss = mse(r, r_targets) #Apply loss function to results
+                s_loss = mse(s, s_h) #Apply loss function to results
+                h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
+                d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
 
-            h_optimizer.zero_grad()
-            total_loss['hidden loss'] += h_loss.item()
-            h_loss.backward(
-                retain_graph = True,
-                inputs = list(self.m_weights['representation']['model'].parameters())
-            ) #Backpropegate through model
-            torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
-            h_optimizer.step()
+                h_optimizer.zero_grad()
+                total_loss['hidden loss'] += h_loss.item()
+                h_loss.backward(
+                    retain_graph = True,
+                    inputs = list(self.m_weights['representation']['model'].parameters())
+                ) #Backpropegate through model
+                torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
+                h_optimizer.step()
 
-            total_loss['dynamics loss'] += d_loss.item()
-            g_optimizer.zero_grad()
-            d_loss.backward(
-                retain_graph = True,
-                inputs = list(self.m_weights['dynamics']['model'].parameters())
-            ) #Backpropegate through model
-            torch.nn.utils.clip_grad_norm_(self.m_weights['dynamics']['model'].parameters(), 0.5)
-            g_optimizer.step()
+                total_loss['dynamics loss'] += d_loss.item()
+                g_optimizer.zero_grad()
+                d_loss.backward(
+                    retain_graph = True,
+                    inputs = list(self.m_weights['dynamics']['model'].parameters())
+                ) #Backpropegate through model
+                torch.nn.utils.clip_grad_norm_(self.m_weights['dynamics']['model'].parameters(), 0.5)
+                g_optimizer.step()
 
-            total_loss['value loss'] += v_loss.item()
-            v_optimizer.zero_grad()
-            v_loss.backward(
-                inputs = list(self.m_weights['value']['model'].parameters())
-            ) #Backpropegate through model
-            torch.nn.utils.clip_grad_norm_(self.m_weights['value']['model'].parameters(), 0.5)
-            v_optimizer.step()
+                total_loss['value loss'] += v_loss.item()
+                v_optimizer.zero_grad()
+                v_loss.backward(
+                    inputs = list(self.m_weights['value']['model'].parameters())
+                ) #Backpropegate through model
+                torch.nn.utils.clip_grad_norm_(self.m_weights['value']['model'].parameters(), 0.5)
+                v_optimizer.step()
 
-            total_loss['policy loss'] += p_loss.item()
-            p_optimizer.zero_grad()
-            p_loss.backward(
-                inputs = list(self.m_weights['policy']['model'].parameters())
-            ) #Backpropegate through model
-            torch.nn.utils.clip_grad_norm_(self.m_weights['policy']['model'].parameters(), 0.5)
-            p_optimizer.step()
+                total_loss['policy loss'] += p_loss.item()
+                p_optimizer.zero_grad()
+                p_loss.backward(
+                    inputs = list(self.m_weights['policy']['model'].parameters())
+                ) #Backpropegate through model
+                torch.nn.utils.clip_grad_norm_(self.m_weights['policy']['model'].parameters(), 0.5)
+                p_optimizer.step()
 
-            total_loss['state loss'] += s_loss.item()
-            s_optimizer.zero_grad()
-            s_loss.backward(
-                inputs = list(self.m_weights['state']['model'].parameters())
-            ) #Backpropegate through model
-            torch.nn.utils.clip_grad_norm_(self.m_weights['state']['model'].parameters(), 0.5)
-            s_optimizer.step()
+                total_loss['state loss'] += s_loss.item()
+                s_optimizer.zero_grad()
+                s_loss.backward(
+                    inputs = list(self.m_weights['state']['model'].parameters())
+                ) #Backpropegate through model
+                torch.nn.utils.clip_grad_norm_(self.m_weights['state']['model'].parameters(), 0.5)
+                s_optimizer.step()
 
-            total_loss['reward loss'] += r_loss.item()
-            r_optimizer.zero_grad()
-            r_loss.backward(
-                inputs = list(self.m_weights['reward']['model'].parameters())
-            ) #Backpropegate through model
-            torch.nn.utils.clip_grad_norm_(self.m_weights['reward']['model'].parameters(), 0.5)
-            r_optimizer.step()
+                total_loss['reward loss'] += r_loss.item()
+                r_optimizer.zero_grad()
+                r_loss.backward(
+                    inputs = list(self.m_weights['reward']['model'].parameters())
+                ) #Backpropegate through model
+                torch.nn.utils.clip_grad_norm_(self.m_weights['reward']['model'].parameters(), 0.5)
+                r_optimizer.step()
 
-            t_steps += 1
+                t_steps += 1
+            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {train_data.size(0)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}')
         #Updated new model
         for m in self.m_weights:
             torch.save({
                 'state_dict': self.m_weights[m]['model'].state_dict(),
             }, self.m_weights[m]['param'])
-        t_log = {**{'Date':datetime.now(),'Samples':train_data.size(0),'Time':time.time() - start_time},**{k:(v/t_steps) for k,v in total_loss.items()}}
-        print(f'{time.time() - start_time} ms | {train_data.size(0)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}')
+        t_log = {**{'Date':datetime.now(),'Epoch':self.epoch, 'Samples':train_data.size(0),'Time':time.time() - start_time},**{k:(v/t_steps) for k,v in total_loss.items()}}
         return t_log
 
     def get_batch(self, source, x, y):
