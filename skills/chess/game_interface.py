@@ -198,6 +198,7 @@ class chess:
                 t_bank.append(p['param'])
         game_results['tie'] = 0
         train_data = pd.DataFrame()
+        t_log = pd.DataFrame()
         #Begin training games
         for epoch in range(GAMES):
             print(f'STARTING GAMES\n')
@@ -237,6 +238,7 @@ class chess:
                 train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
             train_data['reward'] = [0.] * len(train_data)
             for m in t_bank:
-                Agent(param_name = m, train = False).train(train_data)
+                t_log = t_log.append({**{'Agent':m},**Agent(param_name = m, train = False).train(train_data)},ignore_index=True)
+            t_log.to_csv('skills/chess/data/training_log.csv',index=False)
             train_data = pd.DataFrame()
             a_players.reverse()
