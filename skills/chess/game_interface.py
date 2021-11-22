@@ -1,14 +1,3 @@
-'''
-import os
-import time
-import math
-import json
-import torch
-
-import pandas as pd
-
-from shutil import copyfile
-'''
 import os
 import json
 import random
@@ -198,7 +187,10 @@ class chess:
                 t_bank.append(p['param'])
         game_results['tie'] = 0
         train_data = pd.DataFrame()
-        t_log = pd.DataFrame()
+        if os.path.exists('skills/chess/data/training_log.csv'):
+            t_log = pd.read_csv('skills/chess/data/training_log.csv')
+        else:
+            t_log = pd.DataFrame()
         #Begin training games
         for epoch in range(GAMES):
             print(f'STARTING GAMES\n')
