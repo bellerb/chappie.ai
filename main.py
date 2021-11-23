@@ -13,7 +13,7 @@ chess.play_game(
 )
 '''
 chess.traing_session(
-    games = 1,
+    games = 5,
     boards = 1,
     best_of = float('inf'),
     players = [

@@ -142,17 +142,21 @@ class Agent:
         self.lr = m_param['training']['lr'] #Learning rate
         self.epoch = m_param['training']['epoch'] #Training epochs
 
-    def choose_action(self, state):
+    def choose_action(self, state, legal_moves = None):
+        #Expand first node of game tree
         with torch.no_grad():
             h_s = self.m_weights['representation']['model'](state)
             d = self.m_weights['dynamics']['model'](h_s, torch.tensor([[0]])) #dynamics function
-        for _ in tqdm(range(self.sim_amt),desc='MCTS'):
-            self.MCTS.depth = 0
-            self.MCTS.search(d, train = self.train_control)
         s_hash = self.MCTS.state_hash(d)
+        self.MCTS.tree[(s_hash, None)] = self.MCTS.Node()
+        self.MCTS.expand_tree(d, s_hash, None, mask = legal_moves, noise = True)
+        #Run simulations
+        for _ in tqdm(range(self.sim_amt),desc='MCTS'):
+            self.MCTS.l = 0
+            self.MCTS.search(d, train = self.train_control)
+        #Find best move
         value = self.MCTS.tree[(s_hash, None)].Q
         counts = {a: self.MCTS.tree[(s_hash,a)].N for a in range(self.action_space)}
-
         if self.T == 0:
             a_bank = [k for k,v in counts.items() if v == max(counts.values())]
             a = random.choice(a_bank)
@@ -168,30 +172,30 @@ class Agent:
         #Initailize training
         mse = torch.nn.MSELoss() #Mean squared error loss
         bce = torch.nn.BCELoss() #Binary cross entropy loss
-        h_optimizer = torch.optim.SGD(
+        h_optimizer = torch.optim.Adam(
             self.m_weights['representation']['model'].parameters(),
             lr=self.lr
-        ) #Optimization algorithm using stochastic gradient descent
-        g_optimizer = torch.optim.SGD(
+        )
+        g_optimizer = torch.optim.Adam(
             self.m_weights['dynamics']['model'].parameters(),
             lr=self.lr
-        ) #Optimization algorithm using stochastic gradient descent
-        v_optimizer = torch.optim.SGD(
+        )
+        v_optimizer = torch.optim.Adam(
             self.m_weights['value']['model'].parameters(),
             lr=self.lr
-        ) #Optimization algorithm using stochastic gradient descent
-        p_optimizer = torch.optim.SGD(
+        )
+        p_optimizer = torch.optim.Adam(
             self.m_weights['policy']['model'].parameters(),
             lr=self.lr
-        ) #Optimization algorithm using stochastic gradient descent
-        s_optimizer = torch.optim.SGD(
+        )
+        s_optimizer = torch.optim.Adam(
             self.m_weights['state']['model'].parameters(),
             lr=self.lr
-        ) #Optimization algorithm using stochastic gradient descent
-        r_optimizer = torch.optim.SGD(
+        )
+        r_optimizer = torch.optim.Adam(
             self.m_weights['reward']['model'].parameters(),
             lr=self.lr
-        ) #Optimization algorithm using stochastic gradient descent
+        )
         self.m_weights['representation']['model'].train() #Turn on the train mode
         self.m_weights['dynamics']['model'].train() #Turn on the train mode
         self.m_weights['value']['model'].train() #Turn on the train mode
@@ -199,6 +203,7 @@ class Agent:
         self.m_weights['state']['model'].train() #Turn on the train mode
         self.m_weights['reward']['model'].train() #Turn on the train mode
         train_data = torch.tensor(data.values) #Set training data to a tensor
+        t_log = []
         #Start training model
         start_time = time.time() #Get time of starting process
         for epoch in range(self.epoch):
@@ -290,13 +295,21 @@ class Agent:
                 r_optimizer.step()
 
                 t_steps += 1
-            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {train_data.size(0)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}')
+            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {train_data.size(0)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}\n')
+            t_log.append({
+                **{
+                    'Date':datetime.now(),
+                    'Epoch':epoch,
+                    'Samples':train_data.size(0),
+                    'Time':time.time() - start_time
+                },
+                **{k:(v/t_steps) for k,v in total_loss.items()}
+            })
         #Updated new model
         for m in self.m_weights:
             torch.save({
                 'state_dict': self.m_weights[m]['model'].state_dict(),
             }, self.m_weights[m]['param'])
-        t_log = {**{'Date':datetime.now(),'Epoch':self.epoch, 'Samples':train_data.size(0),'Time':time.time() - start_time},**{k:(v/t_steps) for k,v in total_loss.items()}}
         return t_log
 
     def get_batch(self, source, x, y):
@@ -334,5 +347,3 @@ class Agent:
             v_target.reshape(min(y, len(source[x:])), 1).to(torch.float),
             r_target.reshape(min(y, len(source[x:])), 1).to(torch.float)
         )
-
-

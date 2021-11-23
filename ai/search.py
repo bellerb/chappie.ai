@@ -39,7 +39,6 @@ class MCTS:
         """
         self.tree = {} #Game tree
         self.l = 0 #Last node depth
-        self.v_l = 0 #Last node value
         self.max_depth = max_depth #Max allowable depth
         self.c1 = c1 #Exploration hyper parameter 1
         self.c2 = c2 #Exploration hyper parameter 2
@@ -125,50 +124,60 @@ class MCTS:
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
                 d_k = self.g(s, a + 1) #dynamics function
-                #print('d',d_k.size())
                 r_k = self.r(d_k) #reward function
                 s_k = self.s(d_k) #next state function
-                #print('s',s_k.size())
             s = s_k.reshape(s.size())
             self.tree[(s_hash, a_hash)].S = s
             self.tree[(s_hash, a_hash)].R = r_k.reshape(1).item()
         elif a is not None and self.tree[(s_hash, a_hash)].S is not None:
-            d = self.tree[(s_hash, a_hash)].S
+            s = self.tree[(s_hash, a_hash)].S
         sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
         if self.tree[(s_hash, a_hash)].N == 0:
             #EXPANSION ---
-            with torch.no_grad():
-                v_k = self.v(s) #value function
-                p = self.p(s) #policy function
-            if a is None and train is True:
-                p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
-            self.tree[(s_hash, a_hash)].Q = v_k.reshape(1).item()
-            self.v_l = self.tree[(s_hash, a_hash)].Q
-            for a_k, p_a in enumerate(p.reshape(self.p.action_space)):
-                if (sk_hash, a_k) not in self.tree:
-                    self.tree[(sk_hash, a_k)] = self.Node()
-                self.tree[(sk_hash, a_k)].P = p_a.item()
+            self.expand_tree(s, s_hash, a_hash, sk_hash)
         elif self.l < self.max_depth:
             a_k = torch.tensor(self.pUCT(sk_hash)) #Find best action to perform @ [sk]
             a_k = a_k.reshape((1,1))
-            k = self.l
             self.l += 1
             #BACKUP ---
-            G_1, r_1 = self.search(s, a_k) #Go level deeper
-            if (self.l - k - 1) > 0:
-                G_k = ((self.g_d ** (self.l - k - 1)) * r_1) + ((self.g_d ** (self.l - k)) * self.v_l)
-                G = G_1 + G_k
-            else:
-                G = 0
+            v_1  = self.search(s, a_k) #Go level deeper
+            G = self.tree[(s_hash, a_hash)].R + (self.g_d * v_1)
             self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1) #Updated value
         if self.tree[(s_hash, a_hash)].Q < self.Q_min:
             self.Q_min = self.tree[(s_hash, a_hash)].Q
         if self.tree[(s_hash, a_hash)].Q > self.Q_max:
             self.Q_max = self.tree[(s_hash, a_hash)].Q
         self.tree[(s_hash, a_hash)].N += 1
-        if 'G' not in locals():
-            G = 0
-        if self.single_player == True:
-            return G, self.tree[(s_hash, a_hash)].R
-        else:
-            return G, -self.tree[(s_hash, a_hash)].R
+        return self.tree[(s_hash, a_hash)].Q if self.single_player == True else -self.tree[(s_hash, a_hash)].Q
+
+    def expand_tree(self, s, s_hash, a_hash, sk_hash = None, mask = None, noise = False):
+        """
+        Input: s - tensor representing hidden state of task
+               s_hash - string representing the state hash
+               a_hash - string representing the action hash
+               sk_hash - string representing the next state hash (default = None) [OPTIONAL]
+               mask - list containing the legal moves mask (default = None) [OPTIONAL]
+               noise - boolean controling added noise to the policy (default = Fasle) [OPTIONAL]
+        Description: Expand game tree
+        Output: None
+        """
+        if sk_hash is None:
+            sk_hash = s_hash
+        with torch.no_grad():
+            v_k = self.v(s) #value function
+            p = self.p(s) #policy function
+        #ADD NOISE TO SEARCH
+        if noise == True:
+            p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
+        #MASK LEGAL MOVES ON FIRST SIM
+        if mask is not None:
+            for i, m in enumerate(mask):
+                p[0][i] *= m
+        #UPDATE NODE VALUES
+        self.tree[(s_hash, a_hash)].Q = v_k.reshape(1).item()
+        for a_k, p_a in enumerate(p.reshape(self.p.action_space)):
+            if (sk_hash, a_k) not in self.tree:
+                self.tree[(sk_hash, a_k)] = self.Node()
+            self.tree[(sk_hash, a_k)].P = p_a.item()
+            if mask is not None and p_a.item() == float('-inf'):
+                self.tree[(sk_hash, a_k)].Q = float('-inf')

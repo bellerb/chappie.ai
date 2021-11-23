@@ -211,12 +211,14 @@ class Representation(nn.Module):
             heads = h_heads,
             dropout = h_dropout
         )
+        self.GELU = torch.nn.GELU()
 
     def forward(self, s):
         s_emb = self.Embedding(s)
         s_emb = self.PosEncoder(s_emb)
         latent = repeat(self.latent, 'y x -> b y x', b = s.size(0))
         h = self.HiddenNetwork(latent, s_emb)
+        h = self.GELU(h)
         return h
 
 class Dynamics(nn.Module):
@@ -352,8 +354,10 @@ class NextState(nn.Module):
             heads = state_k_heads,
             dropout = state_k_dropout
         )
+        self.GELU = torch.nn.GELU()
 
     def forward(self, enc):
         state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
         s_k = self.StateNetwork(state, enc)
+        s_k = self.GELU(s_k)
         return s_k

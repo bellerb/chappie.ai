@@ -4,6 +4,7 @@ import random
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+from datetime import datetime
 
 from ai.bot import Agent
 from tasks.games.chess.chess import Chess
@@ -88,17 +89,12 @@ class chess:
                         cur = input('What piece do you want to move?\n')
                         next = input('Where do you want to move the piece to?\n')
                     else:
-                        #legal = self.legal_moves(chess_game) #Filter legal moves for inital state
-                        probs, v = a_players[i].choose_action(enc_state)
-                        print(v)
-                        probs = np.array(probs)
-                        probs[probs == 0] = 1e-8
                         legal = self.legal_moves(chess_game) #Filter legal moves for inital state
-                        #print(legal.sum(), len(legal))
-                        probs = np.multiply(legal, probs)
-                        probs = probs.tolist()
+                        legal[legal == 0] = float('-inf')
+                        probs, v = a_players[i].choose_action(enc_state, legal_moves = legal)
                         max_prob = max(probs)
-                        print(max_prob)
+                        print(f'Value = {v}')
+                        print(f'Move Probability = {max_prob}')
                         a_bank = [j for j, v in enumerate(probs) if v == max_prob]
                         b_a = random.choice(a_bank)
                         a_map = np.zeros(4096)
@@ -113,21 +109,11 @@ class chess:
                         print('Invalid move')
                     else:
                         valid = True
-                        #Better game logging
-                        cur_pos = chess_game.board_2_array(cur)
-                        next_pos = chess_game.board_2_array(next)
-                        log.append({
-                            **{f'state{i}':float(s) for i, s in enumerate(enc_state[0])},
-                            **{f'action{x}':1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)}
-                        })
-                        '''
                         log.append({
                             **{f'state{i}':float(s) for i,s in enumerate(plumbing.encode_state(chess_game)[0])},
                             **{f'prob{x}':p for x, p in enumerate(probs)}
                         })
-                        '''
-                        print(f'w {cur.lower()}-->{next.lower()} | EPOCH:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n') if chess_game.p_move > 0 else print(f'b {cur.lower()}-->{next.lower()} | EPOCH:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
-
+                        print(f'w {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n') if chess_game.p_move > 0 else print(f'b {cur.lower()}-->{next.lower()} | EPOCH:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
                         if a_players[i] != 'human':
                             state = chess_game.check_state(chess_game.EPD_hash())
                             if state == '50M' or state == '3F':
@@ -142,7 +128,7 @@ class chess:
                                 if chess_game.check_state(chess_game.EPD_hash()) == 'PP':
                                     chess_game.pawn_promotion()
                         if sum(state) > 0:
-                            print(f'FINISHED | EPOCH:{epoch} BOARD:{game_name} MOVE:{len(log)} STATE:{state}\n')
+                            print(f'FINISHED | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} STATE:{state}\n')
                             game_train_data = pd.DataFrame(log)
                             game_train_data = game_train_data.astype(float)
                             end = True
@@ -179,13 +165,11 @@ class chess:
         BEST_OF = best_of #Amount of games played when evaluating the models
         t_bank = []
         a_players = []
-        game_results = {}
+        game_results = {'white':0, 'black':0, 'tie':0}
         for p in players:
-            game_results[p['param']] = 0
             a_players.append(p['param'])
             if p['train'] == True:
                 t_bank.append(p['param'])
-        game_results['tie'] = 0
         train_data = pd.DataFrame()
         if os.path.exists('skills/chess/data/training_log.csv'):
             t_log = pd.read_csv('skills/chess/data/training_log.csv')
@@ -202,24 +186,16 @@ class chess:
                 players = a_players
             )
             if state == [1,0,0]:
-                print(f'{a_players[0]} WINS')
-                game_results[a_players[0]] += 1
+                print(f'WHITE WINS')
+                game_results['white'] += 1
             elif state == [0,0,1]:
-                print(f'{a_players[-1]} WINS')
-                game_results[a_players[-1]] += 1
+                print(f'BLACK WINS')
+                game_results['black'] += 1
             else:
                 print('TIE GAME')
                 game_results['tie'] += 1
             print(game_results)
-            '''
-            w_m = max(game_results, key=game_results.get)
-            if sum([v for v in game_results.values()]) >= BEST_OF and len(t_bank) == 1 and True in [True for p in t_bank if hash(p) == w_m]:
-                l_m = [p for p in a_players if hash(p) != wm][0]
-                copyfile(
-                    os.path.join(folder,w_m),
-                    os.path.join(folder,l_m)
-                ) #Overwrite active model with new model
-            '''
+            print()
             if sum([v for v in game_results.values()]) >= BEST_OF:
                 game_results = {p: 0 for p in a_players}
             if state == [0,0,0]:
@@ -230,7 +206,18 @@ class chess:
                 train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
             train_data['reward'] = [0.] * len(train_data)
             for m in t_bank:
-                t_log = t_log.append({**{'Agent':m},**Agent(param_name = m, train = False).train(train_data)},ignore_index=True)
-            t_log.to_csv('skills/chess/data/training_log.csv',index=False)
+                m_log = pd.DataFrame(Agent(param_name = m, train = False).train(train_data))
+                m_log['model'] = m
+                t_log = t_log.append(m_log,ignore_index=True)
+                del m_log
+            t_log.to_csv('skills/chess/data/training_log.csv', index=False)
+            if os.path.exists('skills/chess/data/game_log.csv'):
+                g_log = pd.read_csv('skills/chess/data/game_log.csv')
+            else:
+                g_log = pd.DataFrame()
+            train_data['Date'] = [datetime.now()] * len(train_data)
+            g_log = g_log.append(train_data, ignore_index=True)
+            g_log.to_csv('skills/chess/data/game_log.csv', index=False)
+            del g_log
             train_data = pd.DataFrame()
             a_players.reverse()
