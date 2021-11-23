@@ -106,12 +106,14 @@ class DecoderOnlyTransformer(nn.Module):
             ),
             nn.Dropout(dropout)
         )
+        self.GELU = torch.nn.GELU()
 
     def forward(self, x):
         z = self.self_attention(x)
         z = nn.functional.normalize(z, dim=-1)
         z = self.linear(z)
         z = nn.functional.normalize(z, dim=-1)
+        z = self.GELU(z)
         return z
 
 class Perceiver(nn.Module):
@@ -247,10 +249,12 @@ class Dynamics(nn.Module):
             cross_dropout = cross_dropout,
             self_dropout = self_dropout
         )
+        self.GELU = torch.nn.GELU()
 
     def forward(self, s, a):
         a_emb = self.ActionSpace(a)
         enc = self.Perceiver(a_emb, s)
+        enc = self.GELU(enc)
         return enc
 
 class Value(nn.Module):
