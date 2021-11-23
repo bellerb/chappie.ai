@@ -109,9 +109,9 @@ class DecoderOnlyTransformer(nn.Module):
 
     def forward(self, x):
         z = self.self_attention(x)
-        z = nn.functional.normalize(z)
+        z = nn.functional.normalize(z, dim=-1)
         z = self.linear(z)
-        z = nn.functional.normalize(z)
+        z = nn.functional.normalize(z, dim=-1)
         return z
 
 class Perceiver(nn.Module):
