@@ -113,7 +113,10 @@ class chess:
                             **{f'state{i}':float(s) for i,s in enumerate(plumbing.encode_state(chess_game)[0])},
                             **{f'prob{x}':p for x, p in enumerate(probs)}
                         })
-                        print(f'w {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n') if chess_game.p_move > 0 else print(f'b {cur.lower()}-->{next.lower()} | EPOCH:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
+                        if chess_game.p_move > 0:
+                            print(f'w {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')  
+                        else:
+                            print(f'b {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
                         if a_players[i] != 'human':
                             state = chess_game.check_state(chess_game.EPD_hash())
                             if state == '50M' or state == '3F':
