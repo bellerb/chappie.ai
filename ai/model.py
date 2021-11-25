@@ -277,12 +277,12 @@ class Value(nn.Module):
             heads = value_heads,
             dropout = value_dropout
         )
-        self.tanh = nn.Tanh()
+        #self.tanh = nn.Tanh()
 
     def forward(self, enc):
         value = repeat(self.value, 'x -> b y x', b = enc.size(0), y = 1)
         v = self.ValueNetwork(value, enc)
-        v = self.tanh(v)
+        #v = self.tanh(v)
         return v
 
 class Policy(nn.Module):
