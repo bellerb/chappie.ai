@@ -221,7 +221,7 @@ class Representation(nn.Module):
         h = self.GELU(h)
         return h
 
-class Dynamics(nn.Module):
+class Backbone(nn.Module):
     def __init__(
         self,
         latent_size,
@@ -235,7 +235,7 @@ class Dynamics(nn.Module):
         cross_dropout = 0.5,
         self_dropout = 0.5,
     ):
-        super(Dynamics, self).__init__()
+        super(Backbone, self).__init__()
         self.ActionSpace = nn.Embedding(
             action_space + 1,
             embedding_size

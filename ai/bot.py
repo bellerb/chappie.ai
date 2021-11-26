@@ -11,7 +11,7 @@ from einops import rearrange
 from datetime import datetime
 
 from ai.search import MCTS
-from ai.model import Representation, Dynamics, Value, Policy, NextState, Reward
+from ai.model import Representation, Backbone, Value, Policy, NextState, Reward
 
 class Agent:
     def __init__(self, param_name='model_param.json', train = False):
@@ -35,7 +35,7 @@ class Agent:
             h_dropout = p_model['h_dropout']
         ).to(self.Device)
         representation.eval()
-        dynamics = Dynamics(
+        backbone = Backbone(
             p_model['latent_size'],
             action_space = p_model['action_space'],
             embedding_size = p_model['embedding_size'],
@@ -47,7 +47,7 @@ class Agent:
             cross_dropout = p_model['cross_dropout'],
             self_dropout = p_model['self_dropout']
         ).to(self.Device)
-        dynamics.eval()
+        backbone.eval()
         policy = Policy(
             p_model['action_space'],
             p_model['latent_size'],
@@ -85,9 +85,9 @@ class Agent:
                 'model':representation,
                 'param':m_param['data']['active-models']['representation']
             },
-            'dynamics':{
-                'model':dynamics,
-                'param':m_param['data']['active-models']['dynamics']
+            'backbone':{
+                'model':backbone,
+                'param':m_param['data']['active-models']['backbone']
             },
             'value':{
                 'model':value,
@@ -119,7 +119,7 @@ class Agent:
         else:
             m_d = m_param['search']['max_depth']
         self.MCTS = MCTS(
-            self.m_weights['dynamics']['model'],
+            self.m_weights['backbone']['model'],
             self.m_weights['value']['model'],
             self.m_weights['policy']['model'],
             self.m_weights['state']['model'],
@@ -146,7 +146,7 @@ class Agent:
         #Expand first node of game tree
         with torch.no_grad():
             h_s = self.m_weights['representation']['model'](state)
-            d = self.m_weights['dynamics']['model'](h_s, torch.tensor([[0]])) #dynamics function
+            d = self.m_weights['backbone']['model'](h_s, torch.tensor([[0]])) #backbone function
         s_hash = self.MCTS.state_hash(d)
         self.MCTS.tree[(s_hash, None)] = self.MCTS.Node()
         self.MCTS.expand_tree(d, s_hash, None, mask = legal_moves, noise = True)
@@ -177,7 +177,7 @@ class Agent:
             lr=self.lr
         )
         g_optimizer = torch.optim.Adam(
-            self.m_weights['dynamics']['model'].parameters(),
+            self.m_weights['backbone']['model'].parameters(),
             lr=self.lr
         )
         v_optimizer = torch.optim.Adam(
@@ -197,7 +197,7 @@ class Agent:
             lr=self.lr
         )
         self.m_weights['representation']['model'].train() #Turn on the train mode
-        self.m_weights['dynamics']['model'].train() #Turn on the train mode
+        self.m_weights['backbone']['model'].train() #Turn on the train mode
         self.m_weights['value']['model'].train() #Turn on the train mode
         self.m_weights['policy']['model'].train() #Turn on the train mode
         self.m_weights['state']['model'].train() #Turn on the train mode
@@ -210,7 +210,7 @@ class Agent:
             t_steps = 0
             total_loss = {
                 'hidden loss':0.,
-                'dynamics loss':0.,
+                'backbone loss':0.,
                 'value loss':0.,
                 'policy loss':0.,
                 'state loss':0,
@@ -226,7 +226,7 @@ class Agent:
                 a[0] = 0
                 a = rearrange(a, '(y x) -> y x ', x = 1)
 
-                d = self.m_weights['dynamics']['model'](h, a)
+                d = self.m_weights['backbone']['model'](h, a)
                 v = self.m_weights['value']['model'](d)
                 p = self.m_weights['policy']['model'](d)
                 s = self.m_weights['state']['model'](d)
@@ -253,13 +253,13 @@ class Agent:
                 torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
                 h_optimizer.step()
 
-                total_loss['dynamics loss'] += d_loss.item()
+                total_loss['backbone loss'] += d_loss.item()
                 g_optimizer.zero_grad()
                 d_loss.backward(
                     retain_graph = True,
-                    inputs = list(self.m_weights['dynamics']['model'].parameters())
+                    inputs = list(self.m_weights['backbone']['model'].parameters())
                 ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['dynamics']['model'].parameters(), 0.5)
+                torch.nn.utils.clip_grad_norm_(self.m_weights['backbone']['model'].parameters(), 0.5)
                 g_optimizer.step()
 
                 total_loss['value loss'] += v_loss.item()

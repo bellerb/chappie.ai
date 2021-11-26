@@ -93,8 +93,10 @@ class chess:
                         legal[legal == 0] = float('-inf')
                         probs, v = a_players[i].choose_action(enc_state, legal_moves = legal)
                         max_prob = max(probs)
-                        print(f'Value = {v}')
-                        print(f'Move Probability = {max_prob}')
+                        print('\n--------------- STATS ---------------')
+                        print(f' Value            | {v}')
+                        print(f' Move Probability | {max_prob}')
+                        print('-------------------------------------\n')
                         a_bank = [j for j, v in enumerate(probs) if v == max_prob]
                         b_a = random.choice(a_bank)
                         a_map = np.zeros(4096)
@@ -109,12 +111,20 @@ class chess:
                         print('Invalid move')
                     else:
                         valid = True
-                        log.append({
-                            **{f'state{i}':float(s) for i,s in enumerate(plumbing.encode_state(chess_game)[0])},
-                            **{f'prob{x}':p for x, p in enumerate(probs)}
-                        })
+                        cur_pos = chess_game.board_2_array(cur)
+                        next_pos = chess_game.board_2_array(next)
+                        if a_players[i] == 'human':
+                            log.append({
+                                **{f'state{i}':float(s) for i,s in enumerate(plumbing.encode_state(chess_game)[0])},
+                                **{f'action{x}':1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)}
+                            })
+                        else:
+                            log.append({
+                                **{f'state{i}':float(s) for i,s in enumerate(plumbing.encode_state(chess_game)[0])},
+                                **{f'prob{x}':p for x, p in enumerate(probs)}
+                            })
                         if chess_game.p_move > 0:
-                            print(f'w {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')  
+                            print(f'w {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
                         else:
                             print(f'b {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
                         if a_players[i] != 'human':

@@ -10,7 +10,7 @@ class MCTS:
     """
     def __init__(
         self,
-        dynamics,
+        backbone,
         value,
         policy,
         state,
@@ -26,7 +26,7 @@ class MCTS:
     ):
         """
         Input: prediction - NN used to predict p, v values
-               dynamics - NN used to predict the next states hidden values and the reward
+               backbone - NN used to predict the next states hidden values and the reward
                user - integer representing which user the agent is (default = None) [OPTIONAL]
                c1 - float representing a search hyperparameter (default = 1.25) [OPTIONAL]
                c2 - float representing a search hyperparameter (default = 19652) [OPTIONAL]
@@ -47,7 +47,7 @@ class MCTS:
         self.g_d = g_d #Gamma discount
         self.Q_max = 1 #Max value
         self.Q_min = -1 #Min value
-        self.g = dynamics #Model used for dynamics
+        self.g = backbone #Model used for backbone
         self.v = value #Model used for value
         self.p = policy #Model used for policy
         self.s = state #Model used for state
@@ -123,7 +123,7 @@ class MCTS:
             self.tree[(s_hash, a_hash)] = self.Node() #Initialize new game tree node
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
-                d_k = self.g(s, a + 1) #dynamics function
+                d_k = self.g(s, a + 1) #backbone function
                 r_k = self.r(d_k) #reward function
                 s_k = self.s(d_k) #next state function
             s = s_k.reshape(s.size())
