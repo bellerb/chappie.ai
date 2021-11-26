@@ -14,7 +14,16 @@ from ai.search import MCTS
 from ai.model import Representation, Backbone, Value, Policy, NextState, Reward
 
 class Agent:
+    """
+    Main agent interface
+    """
     def __init__(self, param_name='model_param.json', train = False):
+        """
+        Input: param_name - string representing the file that contains the models parameters
+               train - boolean control for if the AI is in training mode or not (default = False) [OPTIONAL]
+        Description: Agent initail variables
+        Output: None
+        """
         #Initalize models
         self.Device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if os.path.exists(param_name):
@@ -143,6 +152,12 @@ class Agent:
         self.epoch = m_param['training']['epoch'] #Training epochs
 
     def choose_action(self, state, legal_moves = None):
+        """
+        Input: state - tensor containing the encoded state of a task
+               legal_moves - numpy array containing the legal moves for the task (default = None) [OPTIONAL]
+        Description: Choose the best action for the task
+        Output: tuple containing a list of action probabilities and value of current state of game
+        """
         #Expand first node of game tree
         with torch.no_grad():
             h_s = self.m_weights['representation']['model'](state)
@@ -169,6 +184,11 @@ class Agent:
         return probs, value
 
     def train(self, data):
+        """
+        Input: data - dataframe containing training data
+        Description: Training of the models
+        Output: dataframe containing the training log
+        """
         #Initailize training
         mse = torch.nn.MSELoss() #Mean squared error loss
         bce = torch.nn.BCELoss() #Binary cross entropy loss
