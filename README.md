@@ -6,10 +6,7 @@
 )](#)
 
 ### Description
-The following is a program for a generalized bot you can interact with in your console written in python3. This bot can theoretically perform a multide of tasks. The following task list will be updated as more tasks are learnt.
-
-### Task List
-* Chess
+The following is a program for a generalized bot you can interact with in your console written in python3. This bot has been designed as a general framework for performing a multitude of tasks.
 
 # Launch Instructions
 step 1: open your console <br>
