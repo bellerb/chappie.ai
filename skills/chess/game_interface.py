@@ -12,7 +12,7 @@ from skills.chess.game_plumbing import Plumbing
 
 class chess:
     """
-    Reinforcement training for AI
+    Main interface for the AI to play chess
     """
     def __init__(self, train = False):
         """
@@ -48,15 +48,13 @@ class chess:
         ]
     ):
         """
-        Input: game_name - string representing the game board name
+        Input: game_name - string representing the name of the match
                epoch - integer representing the current epoch
-               white - string representing the file name for the white player (Default='model-active.pth.tar') [OPTIONAL]
-               black - string representing the file name for the black player (Default='model-new.pth.tar') [OPTIONAL]
-               search_amount - integer representing the amount of searches the ai's should perform (Default=50) [OPTIONAL]
-               max_depth - integer representing the max depth each search can go (Default=5) [OPTIONAL]
-               best_of - integer representing the amount of games played in a bracket (Default=5) [OPTIONAL]
-        Description: Plays game for training
-        Output: tuple containing game state, training data and which of the players won
+               train - boolean used as training control (default = False) [OPTIONAL]
+               EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
+               players - list containing the player paramater files (default = ['skills/chess/data/active_param.json','human']
+        Description: play a game of chess
+        Output: tuple containing the game outcome and a dataframe containing the game log
         """
         log = []
         human_code = [
@@ -163,15 +161,20 @@ class chess:
         EPD = None,
         players = [
             {
-                'param':'skills/chess/data/active_param.json',
-                'train':False
-            },
-            {
                 'param':'skills/chess/data/new_param.json',
                 'train':True
             }
         ]
     ):
+        """
+        Input: games - integer representing the amount of games to train on (default = 10) [OPTIONAL]
+               boards - integer representing the amount of boards to play at once (default = 1) [OPTIONAL]
+               best_of = integer representing the amount of games to use in a round-robin (default = 5) [OPTIONAL]
+               EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
+               players - list of player parameters (default = [{'param':'skills/chess/data/new_param.json','train':True}] [OPTIONAL]
+        Description: train ai by playing multiple games of chess
+        Output: None
+        """
         #Initalize variables
         GAMES = games #Games to play on each board
         BOARDS = boards #Amount of boards to play on at a time
