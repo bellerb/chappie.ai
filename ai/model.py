@@ -6,6 +6,9 @@ from torch import nn
 from einops import rearrange, repeat
 
 class Attention(nn.Module):
+    """
+    Multi-head attention model
+    """
     def __init__(
         self,
         input_size,
@@ -14,6 +17,15 @@ class Attention(nn.Module):
         heads = 1,
         dropout = 0.5
     ):
+        """
+        Input: input_size - integer representing the size of the input data
+               context_size - integer representing the size of the context data (default = None) [OPTIONAL]
+               layer_size - integer representing the size of the layers (default = 64) [OPTIONAL]
+               heads - integer representing the amount of heads to use (default = 1) [OPTIONAL]
+               dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize attention model class creating the appropiate layers
+        Output: None
+        """
         super(Attention, self).__init__()
         self.heads = heads
         self.Q = nn.Linear(
@@ -54,6 +66,13 @@ class Attention(nn.Module):
         )
 
     def forward(self, x, context = None, mask = None):
+        """
+        Input: x - tensor containing the input data
+               context - tensor containing contextual data used in cross attention (default = None) [OPTIONAL]
+               mask - tensor containing masked values (default = None) [OPTIONAL]
+        Description: Forward pass of multi-head attention layer
+        Output: tensor containing model output
+        """
         #h:heads, b:batches, y:y-axis x:x-axis
         q = rearrange(self.Q(x), 'b y (h x) -> (b h) y x', h = self.heads) #Query
         if context is None:
@@ -84,6 +103,9 @@ class Attention(nn.Module):
         return z
 
 class DecoderOnlyTransformer(nn.Module):
+    """
+    Decoder only transformer model
+    """
     def __init__(
         self,
         input_size,
@@ -91,6 +113,14 @@ class DecoderOnlyTransformer(nn.Module):
         heads = 1,
         dropout = 0.5
     ):
+        """
+        Input: input_size - integer representing the size of the input data
+               layer_size - integer representing the size of the layers (default = 64) [OPTIONAL]
+               heads - integer representing the amount of heads to use (default = 1) [OPTIONAL]
+               dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize decoder only transformer class creating the appropiate layers
+        Output: None
+        """
         super(DecoderOnlyTransformer, self).__init__()
         self.self_attention = Attention(
             input_size,
@@ -109,6 +139,11 @@ class DecoderOnlyTransformer(nn.Module):
         self.GELU = torch.nn.GELU()
 
     def forward(self, x):
+        """
+        Input: x - tensor containing input data for decoder only transformer
+        Description: Forward pass of decoder only transformer
+        Output: None
+        """
         z = self.self_attention(x)
         z = nn.functional.normalize(z, dim=-1)
         z = self.linear(z)
@@ -117,6 +152,9 @@ class DecoderOnlyTransformer(nn.Module):
         return z
 
 class Perceiver(nn.Module):
+    """
+    Perceiver model
+    """
     def __init__(
         self,
         input_size,
@@ -129,6 +167,18 @@ class Perceiver(nn.Module):
         cross_dropout = 0.5,
         self_dropout = 0.5
     ):
+        """
+        Input: input_size - integer representing the size of the input data
+               latent_size - integer representing the size of the latent layer
+               recursions - integer representing the amount of recursions to run (default = 1) [OPTIONAL]
+               transformer_blocks - integer representing the amount of transformer blocks to use in our recursions (default = 1) [OPTIONAL]
+               layer_size - integer representing the size of the layers (default = 64) [OPTIONAL]
+               cross_heads - integer representing the amount of heads to use in the cross attention blocks (default = 1) [OPTIONAL]
+               self_heads - integer representing the amount of heads in the self attention blocks (default = 1) [OPTIONAL]
+               self_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize perceiver class creating the appropiate layers
+        Output: None
+        """
         super(Perceiver, self).__init__()
         self.recursions = recursions
         self.transformer_blocks = transformer_blocks
@@ -147,6 +197,12 @@ class Perceiver(nn.Module):
         )
 
     def forward(self, x, latent):
+        """
+        Input: x - tensor containing input data
+               latent - tensor containing latent input data
+        Description: Forward pass of perceiver model
+        Output: tensor containing output of model
+        """
         z = self.cross_attention(latent, context = x)
         for _ in range(self.recursions):
             for _ in range(self.transformer_blocks):
@@ -156,12 +212,22 @@ class Perceiver(nn.Module):
         return z
 
 class PositionalEncoding(nn.Module):
+    """
+    Encode input vectors with posistional data
+    """
     def __init__(
         self,
         d_model,
         dropout = 0.1,
         max_len = 5000
     ):
+        """
+        Input: d_model - integer containing the size of the data model input
+               dropout - integer representing the dropout percentage you want to use (Default=0.1) [OPTIONAL]
+               max_len - integer representing the max amount of tokens in a input (Default=5000) [OPTIONAL]
+        Description: Initailize positional encoding layer
+        Output: None
+        """
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p = dropout)
 
@@ -178,10 +244,18 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
+         """
+        Input: x - pytorch tensor containing the input data for the model
+        Description: forward pass of the positional encoding layer
+        Output: pytorch tensor containing positional encoded data (floats)
+        """
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
 class Representation(nn.Module):
+    """
+    Representation model
+    """
     def __init__(
         self,
         latent_size,
@@ -193,6 +267,18 @@ class Representation(nn.Module):
         h_heads = 1,
         h_dropout = 0.5
     ):
+        """
+        Input: latent_size - integer representing the size of the latent layer
+               ntoken - integer representing the amount of tokens (default = 30) [OPTIONAL]3
+               embedding_size - integer representing the size of the embedding layers (default = 64) [OPTIONAL]
+               padding_idx - integer representing the index of the padding token (default = 29) [OPTIONAL]
+               encoder_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+               h_inner - integer representing the size of our hidden layer (default = 64) [OPTIONAL]
+               h_heads - integer representing the amount of heads in the hidden layer (default = 1) [OPTIONAL]
+               h_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize representation class creating the appropiate layers
+        Output: None
+        """
         super(Representation, self).__init__()
         self.latent = nn.Parameter(torch.randn(latent_size))
         self.Embedding = nn.Embedding(
@@ -214,6 +300,11 @@ class Representation(nn.Module):
         self.GELU = torch.nn.GELU()
 
     def forward(self, s):
+        """
+        Input: s - tensor representing the encoded state of the task
+        Description: Forward pass of the representation model
+        Output: tensor representing the output of the model
+        """
         s_emb = self.Embedding(s)
         s_emb = self.PosEncoder(s_emb)
         latent = repeat(self.latent, 'y x -> b y x', b = s.size(0))
@@ -222,6 +313,9 @@ class Representation(nn.Module):
         return h
 
 class Backbone(nn.Module):
+    """
+    Backbone layer of multi task model
+    """
     def __init__(
         self,
         latent_size,
@@ -235,6 +329,20 @@ class Backbone(nn.Module):
         cross_dropout = 0.5,
         self_dropout = 0.5,
     ):
+        """
+        Input: latent_size - integer representing the size of the latent layer
+               action_space - integer representing the amount of possible actions (default = 4096) [OPTIONAL]
+               embedding_size - integer representing the size of the embedding layers (default = 64) [OPTIONAL]
+               perceiver_inner - integer representing the size of the perceiver model (default = 64) [OPTIONAL]
+               recursions - integer representing the amount of recursions to run (default = 1) [OPTIONAL]
+               transformer_blocks - integer representing the amount of transformer blocks to use in our recursions (default = 1) [OPTIONAL]
+               cross_heads - integer representing the amount of heads to use in the cross attention blocks (default = 1) [OPTIONAL]
+               self_heads - integer representing the amount of heads in the self attention blocks (default = 1) [OPTIONAL]
+               cross_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+               self_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize representation class creating the appropiate layers
+        Output: None
+        """
         super(Backbone, self).__init__()
         self.ActionSpace = nn.Embedding(
             action_space + 1,
@@ -254,12 +362,21 @@ class Backbone(nn.Module):
         self.GELU = torch.nn.GELU()
 
     def forward(self, s, a):
+        """
+        Input: s - torch representing the encoded hidden state representation
+               a - torch representing the action being taken
+        Description: Forward pass of backbone layer
+        Output: None
+        """
         a_emb = self.ActionSpace(a)
         enc = self.Perceiver(a_emb, s)
         enc = self.GELU(enc)
         return enc
 
 class Value(nn.Module):
+    """
+    Value head
+    """
     def __init__(
         self,
         value_size,
@@ -268,6 +385,15 @@ class Value(nn.Module):
         value_heads = 1,
         value_dropout = 0.5,
     ):
+        """
+        Input: value_size - integer representing the size of the value layer
+               latent_size - integer representing the size of the latent layer
+               value_inner - integer representing the size of the value model (default = 64) [OPTIONAL]
+               value_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
+               value_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize value class creating the appropiate layers
+        Output: None
+        """
         super(Value, self).__init__()
         self.value = nn.Parameter(torch.randn(value_size))
         self.ValueNetwork = Attention(
@@ -277,15 +403,21 @@ class Value(nn.Module):
             heads = value_heads,
             dropout = value_dropout
         )
-        #self.tanh = nn.Tanh()
 
     def forward(self, enc):
+        """
+        Input: enc - tensor representing the auto encoded action
+        Description: Forward pass of value head
+        Output: None
+        """
         value = repeat(self.value, 'x -> b y x', b = enc.size(0), y = 1)
         v = self.ValueNetwork(value, enc)
-        #v = self.tanh(v)
         return v
 
 class Policy(nn.Module):
+    """
+    Policy head
+    """
     def __init__(
         self,
         policy_size,
@@ -294,6 +426,15 @@ class Policy(nn.Module):
         policy_heads = 1,
         policy_dropout = 0.5
     ):
+        """
+        Input: policy_size - integer representing the size of the policy layer
+               latent_size - integer representing the size of the latent layer
+               policy_inner - integer representing the size of the policy model (default = 64) [OPTIONAL]
+               policy_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
+               policy_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize policy class creating the appropiate layers
+        Output: None
+        """
         super(Policy, self).__init__()
         self.action_space = policy_size
         self.policy = nn.Parameter(torch.randn(policy_size))
@@ -307,12 +448,20 @@ class Policy(nn.Module):
         self.softmax = nn.Softmax(dim = -1)
 
     def forward(self, enc):
+        """
+        Input: enc - tensor representing the auto encoded action
+        Description: Forward pass of policy head
+        Output: None
+        """
         policy = repeat(self.policy, 'x -> b y x', b = enc.size(0), y = 1)
         p = self.PolicyNetwork(policy, enc)
         p = self.softmax(p)
         return p
 
 class Reward(nn.Module):
+    """
+    Reward head
+    """
     def __init__(
         self,
         reward_size,
@@ -321,6 +470,15 @@ class Reward(nn.Module):
         reward_heads = 1,
         reward_dropout = 0.5,
     ):
+        """
+        Input: reward_size - integer representing the size of the reward layer
+               latent_size - integer representing the size of the latent layer
+               reward_inner - integer representing the size of the reward model (default = 64) [OPTIONAL]
+               reward_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
+               reward_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize policy class creating the appropiate layers
+        Output: None
+        """
         super(Reward, self).__init__()
         self.reward = nn.Parameter(torch.randn(reward_size))
         self.RewardNetwork = Attention(
@@ -332,11 +490,19 @@ class Reward(nn.Module):
         )
 
     def forward(self, enc):
+        """
+        Input: enc - tensor representing the auto encoded action
+        Description: Forward pass of reward head
+        Output: None
+        """
         reward = repeat(self.reward, 'x -> b y x', b = enc.size(0), y = 1)
         r = self.RewardNetwork(reward, enc)
         return r
 
 class NextState(nn.Module):
+    """
+    Next state head
+    """
     def __init__(
         self,
         state_size,
@@ -345,6 +511,15 @@ class NextState(nn.Module):
         state_k_heads = 1,
         state_k_dropout = 0.5
     ):
+        """
+        Input: state_size - integer representing the size of the state layer
+               latent_size - integer representing the size of the latent layer
+               state_inner - integer representing the size of the state model (default = 64) [OPTIONAL]
+               state_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
+               state_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize next state class creating the appropiate layers
+        Output: None
+        """
         super(NextState, self).__init__()
         self.state = nn.Parameter(torch.randn(state_size))
         self.StateNetwork = Attention(
@@ -357,6 +532,11 @@ class NextState(nn.Module):
         self.GELU = torch.nn.GELU()
 
     def forward(self, enc):
+        """
+        Input: enc - tensor representing the auto encoded action
+        Description: Forward pass of next state head
+        Output: None
+        """
         state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
         s_k = self.StateNetwork(state, enc)
         s_k = self.GELU(s_k)
