@@ -2,4 +2,3 @@ __pycache__/
 .json
 .csv
 tasks/games/casino/
-tasks/games/chess/
