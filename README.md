@@ -13,7 +13,7 @@ step 1: open your console <br>
 step 2: create a virtual enviroment <br>
 step 3: type the following command "pip install -r requirements.txt"<br>
 step 4: type the following command "cd [app directory]" <br>
-step 5: type the following command "python3 main.py"
+step 5: type the following command "python3 main.py" <br>
 step 6: type in the action you wish to perform.
 
 # Write Up
