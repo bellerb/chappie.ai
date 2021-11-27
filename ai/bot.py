@@ -282,6 +282,23 @@ class Agent:
                 torch.nn.utils.clip_grad_norm_(self.m_weights['backbone']['model'].parameters(), 0.5)
                 g_optimizer.step()
 
+                h = self.m_weights['representation']['model'](state)
+                d = self.m_weights['backbone']['model'](h, a)
+                v = self.m_weights['value']['model'](d)
+                p = self.m_weights['policy']['model'](d)
+                s = self.m_weights['state']['model'](d)
+                r = self.m_weights['reward']['model'](d)
+                s_h = self.m_weights['representation']['model'](s_targets)
+
+                v = rearrange(v, 'b y x -> b (y x)')
+                p = rearrange(p, 'b y x -> b (y x)')
+                r = rearrange(r, 'b y x -> b (y x)')
+
+                v_loss = mse(v, v_targets) #Apply loss function to results
+                p_loss = bce(p, p_targets) #Apply loss function to results
+                r_loss = mse(r, r_targets) #Apply loss function to results
+                s_loss = mse(s, s_h) #Apply loss function to results
+
                 total_loss['value loss'] += v_loss.item()
                 v_optimizer.zero_grad()
                 v_loss.backward(

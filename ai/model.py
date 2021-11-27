@@ -244,7 +244,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-         """
+        """
         Input: x - pytorch tensor containing the input data for the model
         Description: forward pass of the positional encoding layer
         Output: pytorch tensor containing positional encoded data (floats)
