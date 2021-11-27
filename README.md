@@ -19,4 +19,4 @@ step 6: type in the action you wish to perform.
 # Write Up
 To get a better understanding of why the code is written this way check out my detailed write up:
 
-* [LINK]
+* https://medium.com/@bellerb/playing-chess-with-a-generalized-ai-b83d64ac71fe
