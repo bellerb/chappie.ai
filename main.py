@@ -44,13 +44,10 @@ if task == 0:
 elif task == 1:
     chess = chess(train = True)
     chess.traing_session(
-        games = 5,
+        loops = 1,
+        games = 1,
         boards = 1,
-        best_of = float('inf'),
-        players = [
-            {
-                'param':'skills/chess/data/new_param.json',
-                'train':True
-            }
-        ]
+        best_of = 1,
+        player = 'skills/chess/data/new_param.json',
+        SILENT = False
     )

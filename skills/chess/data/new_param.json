@@ -2,12 +2,12 @@
   "data": {
     "token_bank":"skills/chess/data/token_bank.csv",
     "active-models":{
-      "representation":"skills/chess/data/models/h_new.pth.tar",
-      "backbone":"skills/chess/data/models/g_new.pth.tar",
-      "value":"skills/chess/data/models/v_new.pth.tar",
-      "policy":"skills/chess/data/models/p_new.pth.tar",
-      "state":"skills/chess/data/models/s_new.pth.tar",
-      "reward":"skills/chess/data/models/r_new.pth.tar"
+      "representation":"skills/chess/data/models/new_param/h_new.pth.tar",
+      "backbone":"skills/chess/data/models/new_param/g_new.pth.tar",
+      "value":"skills/chess/data/models/new_param/v_new.pth.tar",
+      "policy":"skills/chess/data/models/new_param/p_new.pth.tar",
+      "state":"skills/chess/data/models/new_param/s_new.pth.tar",
+      "reward":"skills/chess/data/models/new_param/r_new.pth.tar"
     }
   },
   "search":{
