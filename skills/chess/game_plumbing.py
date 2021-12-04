@@ -1,5 +1,7 @@
+import os
 import torch
 import pandas as pd
+from shutil import copyfile
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -22,6 +24,14 @@ class Plumbing():
             6 : 'k'
         } #Map of notation to part number
         self.token_bank = pd.read_csv(filename) #All tokens
+
+    def overwrite_model(p1, p2):
+        m_dir = os.listdir(f"{'/'.join(p1.split('/')[:-1])}/models/{p1.split('/')[-1].split('.')[0]}")
+        for i, m in enumerate(m_dir):
+            copyfile(
+                f"{'/'.join(p1.split('/')[:-1])}/models/{p1.split('/')[-1].split('.')[0]}/{m.split('/')[-1]}",
+                f"{'/'.join(p2.split('/')[:-1])}/models/{p2.split('/')[-1].split('.')[0]}/{m.split('/')[-1]}"
+            ) #Overwrite active model with new model
 
     def encode_state(self, game):
         """
