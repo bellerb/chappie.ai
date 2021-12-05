@@ -3,7 +3,6 @@ import torch
 import pandas as pd
 from shutil import copyfile
 from copy import deepcopy
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 class Plumbing():
     def __init__(
@@ -24,14 +23,6 @@ class Plumbing():
             6 : 'k'
         } #Map of notation to part number
         self.token_bank = pd.read_csv(filename) #All tokens
-
-    def overwrite_model(p1, p2):
-        m_dir = os.listdir(f"{'/'.join(p1.split('/')[:-1])}/models/{p1.split('/')[-1].split('.')[0]}")
-        for i, m in enumerate(m_dir):
-            copyfile(
-                f"{'/'.join(p1.split('/')[:-1])}/models/{p1.split('/')[-1].split('.')[0]}/{m.split('/')[-1]}",
-                f"{'/'.join(p2.split('/')[:-1])}/models/{p2.split('/')[-1].split('.')[0]}/{m.split('/')[-1]}"
-            ) #Overwrite active model with new model
 
     def encode_state(self, game):
         """
@@ -59,16 +50,3 @@ class Plumbing():
         else:
             result = []
         return torch.tensor([result])
-
-    def multi_process(func, workers = None):
-        """
-        Input: func - list of dicitonary's containing the functions you want to run in parallel
-        Description: run multiple funcitons in parallel
-        Output: dictionary containing the output from all the supplied functions
-        """
-        data = {}
-        with ProcessPoolExecutor(max_workers = workers) as ex:
-            future_func = {ex.submit(f['func'], *f['args']):f['name'] for f in func}
-            for future in as_completed(future_func):
-                data[future_func[future]] = future.result()
-            return data
