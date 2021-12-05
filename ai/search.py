@@ -2,7 +2,9 @@ import math
 import torch
 import random
 from copy import deepcopy
+from numpy import isnan
 from numpy.random import dirichlet
+#import hashlib
 
 class MCTS:
     """
@@ -38,6 +40,7 @@ class MCTS:
         Output: None
         """
         self.tree = {} #Game tree
+        #self.tree = Manager().dict()
         self.l = 0 #Last node depth
         self.max_depth = max_depth #Max allowable depth
         self.c1 = c1 #Exploration hyper parameter 1
@@ -76,6 +79,7 @@ class MCTS:
         Description: generate unique hash of the supplied hidden state
         Output: integer representing unique hash of the supplied hidden state
         """
+        #result = str(int(hashlib.md5(str(s).encode('utf-8')).hexdigest(), 16))
         result = hash(str(s))
         return result
 
@@ -95,18 +99,20 @@ class MCTS:
         Output: list containing pUCT values for all acitons
         """
         p_visits = sum([self.tree[(s, b)].N for b in range(self.p.action_space)]) #Sum of all potential nodes
-
         u_bank = {}
         for a in range(self.p.action_space):
             U = self.tree[(s, a)].P * ((p_visits**(0.5))/(1+self.tree[(s, a)].N)) #First part of exploration
+            if isnan(U):
+                continue
             U *= self.c1 + (math.log((p_visits + (self.p.action_space * self.c2) + self.p.action_space) / self.c2)) #Second part of exploration
             Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
             u_bank[a] = Q_n + U
+        #print(u_bank)
         m_u = max(u_bank.values())
         a_bank = [k for k,v in u_bank.items() if v == m_u]
         return random.choice(a_bank)
 
-    def search(self, s, a = None, train = False):
+    def search(self, s, train = False, a = None):
         """
         Input: s - tensor representing hidden state of task
                a - integer representing which action is being performed (default = None) [OPTIONAL]
@@ -140,13 +146,14 @@ class MCTS:
             a_k = a_k.reshape((1,1))
             self.l += 1
             #BACKUP ---
-            v_1  = self.search(s, a_k) #Go level deeper
+            v_1  = self.search(s, a = a_k) #Go level deeper
             G = self.tree[(s_hash, a_hash)].R + (self.g_d * v_1)
             self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1) #Updated value
         if self.tree[(s_hash, a_hash)].Q < self.Q_min:
             self.Q_min = self.tree[(s_hash, a_hash)].Q
         if self.tree[(s_hash, a_hash)].Q > self.Q_max:
             self.Q_max = self.tree[(s_hash, a_hash)].Q
+
         self.tree[(s_hash, a_hash)].N += 1
         return self.tree[(s_hash, a_hash)].Q if self.single_player == True else -self.tree[(s_hash, a_hash)].Q
 

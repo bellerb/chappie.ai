@@ -11,7 +11,9 @@ from einops import rearrange
 from datetime import datetime
 
 from ai.search import MCTS
+from tools.toolbox import ToolBox
 from ai.model import Representation, Backbone, Value, Policy, NextState, Reward
+
 
 class Agent:
     """
@@ -150,6 +152,7 @@ class Agent:
         self.bsz = m_param['training']['bsz'] #Batch size
         self.lr = m_param['training']['lr'] #Learning rate
         self.epoch = m_param['training']['epoch'] #Training epochs
+        self.workers = m_param['search']['workers'] #Amount of threads in search
 
     def choose_action(self, state, legal_moves = None):
         """
@@ -165,10 +168,14 @@ class Agent:
         s_hash = self.MCTS.state_hash(d)
         self.MCTS.tree[(s_hash, None)] = self.MCTS.Node()
         self.MCTS.expand_tree(d, s_hash, None, mask = legal_moves, noise = True)
+        self.MCTS.tree[(s_hash, None)].N += 1
         #Run simulations
         for _ in tqdm(range(self.sim_amt),desc='MCTS'):
             self.MCTS.l = 0
-            self.MCTS.search(d, train = self.train_control)
+            search = ToolBox.multi_thread(
+                [{'name':f'search {x}', 'func':self.MCTS.search, 'args':(d, self.train_control)} for x in range(self.workers)],
+                workers = self.workers
+            )
         #Find best move
         value = self.MCTS.tree[(s_hash, None)].Q
         counts = {a: self.MCTS.tree[(s_hash,a)].N for a in range(self.action_space)}
@@ -183,7 +190,7 @@ class Agent:
         self.MCTS.tree = {}
         return probs, value
 
-    def train(self, data):
+    def train(self, data, folder = None):
         """
         Input: data - dataframe containing training data
         Description: Training of the models
@@ -343,10 +350,12 @@ class Agent:
                 **{k:(v/t_steps) for k,v in total_loss.items()}
             })
         #Updated new model
+        if folder is not None and os.path.exists(f'{folder}/weights') == False:
+            os.makedirs(f'{folder}/weights') #Create folder
         for m in self.m_weights:
             torch.save({
                 'state_dict': self.m_weights[m]['model'].state_dict(),
-            }, self.m_weights[m]['param'])
+            }, f"{folder}/weights/{self.m_weights[m]['param']}" if folder is not None else self.m_weights[m]['param'])
         return t_log
 
     def get_batch(self, source, x, y):
