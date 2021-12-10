@@ -12,7 +12,7 @@ from datetime import datetime
 
 from ai.search import MCTS
 from tools.toolbox import ToolBox
-from ai.model import Representation, Backbone, Value, Policy, NextState, Reward
+from ai.model import Representation, Backbone, Head
 
 
 class Agent:
@@ -59,38 +59,6 @@ class Agent:
             self_dropout = p_model['self_dropout']
         ).to(self.Device)
         backbone.eval()
-        policy = Policy(
-            p_model['action_space'],
-            p_model['latent_size'],
-            policy_inner = p_model['policy_inner'],
-            policy_heads = p_model['policy_heads'],
-            policy_dropout = p_model['policy_dropout']
-        ).to(self.Device)
-        policy.eval()
-        value = Value(
-            p_model['value_size'],
-            p_model['latent_size'],
-            value_inner = p_model['value_inner'],
-            value_heads = p_model['value_heads'],
-            value_dropout = p_model['value_dropout']
-        ).to(self.Device)
-        value.eval()
-        state = NextState(
-            p_model['latent_size'],
-            p_model['latent_size'],
-            state_k_inner = p_model['state_k_inner'],
-            state_k_heads = p_model['state_k_heads'],
-            state_k_dropout = p_model['state_k_dropout']
-        ).to(self.Device)
-        state.eval()
-        reward = Reward(
-            p_model['reward_size'],
-            p_model['latent_size'],
-            reward_inner = p_model['reward_inner'],
-            reward_heads = p_model['reward_heads'],
-            reward_dropout = p_model['reward_dropout']
-        ).to(self.Device)
-        reward.eval()
         self.m_weights = {
             'representation':{
                 'model':representation,
@@ -99,24 +67,41 @@ class Agent:
             'backbone':{
                 'model':backbone,
                 'param':m_param['data']['active-models']['backbone']
-            },
-            'value':{
-                'model':value,
-                'param':m_param['data']['active-models']['value']
-            },
-            'policy':{
-                'model':policy,
-                'param':m_param['data']['active-models']['policy']
-            },
-            'state':{
-                'model':state,
-                'param':m_param['data']['active-models']['state']
-            },
-            'reward':{
-                'model':reward,
-                'param':m_param['data']['active-models']['reward']
             }
         }
+        heads = {
+            'policy':{
+                'input':'action_space',
+                'activation': torch.nn.Softmax(dim = -1)
+            },
+            'value':{
+                'input':'value_size',
+                'activation': None
+            },
+            'state':{
+                'input':'latent_size',
+                'activation': torch.nn.GELU()
+            },
+            'reward':{
+                'input':'reward_size',
+                'activation': None
+            }
+        }
+        for h in heads:
+            self.m_weights[h] = {
+                'model': Head(
+                    p_model[f'{heads[h]["input"]}'],
+                    p_model['latent_size'],
+                    inner = p_model[f'{h}_inner'],
+                    heads = p_model[f'{h}_heads'],
+                    dropout = p_model[f'{h}_dropout'],
+                    activation = heads[h]['activation']
+                ).to(self.Device),
+                'param': m_param['data']['active-models'][h] if 'data' in m_param
+                            and 'active-models' in m_param['data'] and h in m_param['data']['active-models']
+                            else None
+            }
+            self.m_weights[h]['model'].eval()
         for m in self.m_weights:
             if os.path.exists(self.m_weights[m]['param']):
                 checkpoint = torch.load(
@@ -135,6 +120,7 @@ class Agent:
             self.m_weights['policy']['model'],
             self.m_weights['state']['model'],
             self.m_weights['reward']['model'],
+            action_space = m_param['model']['action_space'],
             c2 = m_param['search']['c2'],
             d_a = m_param['search']['d_a'],
             e_f = m_param['search']['e_f'],
@@ -168,6 +154,7 @@ class Agent:
         s_hash = self.MCTS.state_hash(d)
         self.MCTS.tree[(s_hash, None)] = self.MCTS.Node()
         self.MCTS.expand_tree(d, s_hash, None, mask = legal_moves, noise = True)
+        self.MCTS.tree[(s_hash, None)].R = self.m_weights['reward']['model'](d).reshape(1).item()
         self.MCTS.tree[(s_hash, None)].N += 1
         #Run simulations
         for _ in tqdm(range(self.sim_amt),desc='MCTS'):
@@ -178,6 +165,7 @@ class Agent:
             )
         #Find best move
         value = self.MCTS.tree[(s_hash, None)].Q
+        reward = self.MCTS.tree[(s_hash, None)].R
         counts = {a: self.MCTS.tree[(s_hash,a)].N for a in range(self.action_space)}
         if self.T == 0:
             a_bank = [k for k,v in counts.items() if v == max(counts.values())]
@@ -188,7 +176,7 @@ class Agent:
             c_s = sum(c ** (1./self.T) for c in counts.values())
             probs = [(x ** (1./self.T)) / c_s for x in counts.values()]
         self.MCTS.tree = {}
-        return probs, value
+        return (probs, value, reward)
 
     def train(self, data, folder = None):
         """

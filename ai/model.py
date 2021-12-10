@@ -373,143 +373,18 @@ class Backbone(nn.Module):
         enc = self.GELU(enc)
         return enc
 
-class Value(nn.Module):
+class Head(nn.Module):
     """
-    Value head
-    """
-    def __init__(
-        self,
-        value_size,
-        latent_size,
-        value_inner = 64,
-        value_heads = 1,
-        value_dropout = 0.5,
-    ):
-        """
-        Input: value_size - integer representing the size of the value layer
-               latent_size - integer representing the size of the latent layer
-               value_inner - integer representing the size of the value model (default = 64) [OPTIONAL]
-               value_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
-               value_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
-        Description: Initailize value class creating the appropiate layers
-        Output: None
-        """
-        super(Value, self).__init__()
-        self.value = nn.Parameter(torch.randn(value_size))
-        self.ValueNetwork = Attention(
-            self.value.size(-1),
-            layer_size = value_inner,
-            context_size = latent_size[-1],
-            heads = value_heads,
-            dropout = value_dropout
-        )
-
-    def forward(self, enc):
-        """
-        Input: enc - tensor representing the auto encoded action
-        Description: Forward pass of value head
-        Output: None
-        """
-        value = repeat(self.value, 'x -> b y x', b = enc.size(0), y = 1)
-        v = self.ValueNetwork(value, enc)
-        return v
-
-class Policy(nn.Module):
-    """
-    Policy head
+    Head layer for multi task model
     """
     def __init__(
         self,
-        policy_size,
+        input_size,
         latent_size,
-        policy_inner = 64,
-        policy_heads = 1,
-        policy_dropout = 0.5
-    ):
-        """
-        Input: policy_size - integer representing the size of the policy layer
-               latent_size - integer representing the size of the latent layer
-               policy_inner - integer representing the size of the policy model (default = 64) [OPTIONAL]
-               policy_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
-               policy_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
-        Description: Initailize policy class creating the appropiate layers
-        Output: None
-        """
-        super(Policy, self).__init__()
-        self.action_space = policy_size
-        self.policy = nn.Parameter(torch.randn(policy_size))
-        self.PolicyNetwork = Attention(
-            self.policy.size(-1),
-            layer_size = policy_inner,
-            context_size = latent_size[-1],
-            heads = policy_heads,
-            dropout = policy_dropout
-        )
-        self.softmax = nn.Softmax(dim = -1)
-
-    def forward(self, enc):
-        """
-        Input: enc - tensor representing the auto encoded action
-        Description: Forward pass of policy head
-        Output: None
-        """
-        policy = repeat(self.policy, 'x -> b y x', b = enc.size(0), y = 1)
-        p = self.PolicyNetwork(policy, enc)
-        p = self.softmax(p)
-        return p
-
-class Reward(nn.Module):
-    """
-    Reward head
-    """
-    def __init__(
-        self,
-        reward_size,
-        latent_size,
-        reward_inner = 64,
-        reward_heads = 1,
-        reward_dropout = 0.5,
-    ):
-        """
-        Input: reward_size - integer representing the size of the reward layer
-               latent_size - integer representing the size of the latent layer
-               reward_inner - integer representing the size of the reward model (default = 64) [OPTIONAL]
-               reward_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
-               reward_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
-        Description: Initailize policy class creating the appropiate layers
-        Output: None
-        """
-        super(Reward, self).__init__()
-        self.reward = nn.Parameter(torch.randn(reward_size))
-        self.RewardNetwork = Attention(
-            self.reward.size(-1),
-            layer_size = reward_inner,
-            context_size = latent_size[-1],
-            heads = reward_heads,
-            dropout = reward_dropout
-        )
-
-    def forward(self, enc):
-        """
-        Input: enc - tensor representing the auto encoded action
-        Description: Forward pass of reward head
-        Output: None
-        """
-        reward = repeat(self.reward, 'x -> b y x', b = enc.size(0), y = 1)
-        r = self.RewardNetwork(reward, enc)
-        return r
-
-class NextState(nn.Module):
-    """
-    Next state head
-    """
-    def __init__(
-        self,
-        state_size,
-        latent_size,
-        state_k_inner = 64,
-        state_k_heads = 1,
-        state_k_dropout = 0.5
+        inner = 64,
+        heads = 1,
+        dropout = 0.5,
+        activation = None
     ):
         """
         Input: state_size - integer representing the size of the state layer
@@ -520,16 +395,16 @@ class NextState(nn.Module):
         Description: Initailize next state class creating the appropiate layers
         Output: None
         """
-        super(NextState, self).__init__()
-        self.state = nn.Parameter(torch.randn(state_size))
-        self.StateNetwork = Attention(
-            self.state.size(-1),
-            layer_size = state_k_inner,
+        super(Head, self).__init__()
+        self.latent = nn.Parameter(torch.randn(input_size))
+        self.cross_attention = Attention(
+            self.latent.size(-1),
+            layer_size = inner,
             context_size = latent_size[-1],
-            heads = state_k_heads,
-            dropout = state_k_dropout
+            heads = heads,
+            dropout = dropout
         )
-        self.GELU = torch.nn.GELU()
+        self.activation = activation
 
     def forward(self, enc):
         """
@@ -537,7 +412,11 @@ class NextState(nn.Module):
         Description: Forward pass of next state head
         Output: None
         """
-        state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
-        s_k = self.StateNetwork(state, enc)
-        s_k = self.GELU(s_k)
+        if len(self.latent.size()) == 1:
+            latent = repeat(self.latent, 'x -> b y x', b = enc.size(0), y = 1)
+        else:
+            latent = repeat(self.latent, 'y x -> b y x', b = enc.size(0))
+        s_k = self.cross_attention(latent, enc)
+        if self.activation is not None:
+            s_k = self.activation(s_k)
         return s_k

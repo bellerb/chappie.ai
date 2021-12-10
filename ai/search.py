@@ -17,6 +17,7 @@ class MCTS:
         policy,
         state,
         reward,
+        action_space = 4096,
         user = None,
         c1 = 1.25,
         c2 = 19652,
@@ -42,6 +43,7 @@ class MCTS:
         self.tree = {} #Game tree
         #self.tree = Manager().dict()
         self.l = 0 #Last node depth
+        self.action_space = action_space #Amount of possible actions
         self.max_depth = max_depth #Max allowable depth
         self.c1 = c1 #Exploration hyper parameter 1
         self.c2 = c2 #Exploration hyper parameter 2
@@ -98,13 +100,13 @@ class MCTS:
         Description: return best action state using polynomial upper confidence trees
         Output: list containing pUCT values for all acitons
         """
-        p_visits = sum([self.tree[(s, b)].N for b in range(self.p.action_space)]) #Sum of all potential nodes
+        p_visits = sum([self.tree[(s, b)].N for b in range(self.action_space)]) #Sum of all potential nodes
         u_bank = {}
-        for a in range(self.p.action_space):
+        for a in range(self.action_space):
             U = self.tree[(s, a)].P * ((p_visits**(0.5))/(1+self.tree[(s, a)].N)) #First part of exploration
             if isnan(U):
                 continue
-            U *= self.c1 + (math.log((p_visits + (self.p.action_space * self.c2) + self.p.action_space) / self.c2)) #Second part of exploration
+            U *= self.c1 + (math.log((p_visits + (self.action_space * self.c2) + self.action_space) / self.c2)) #Second part of exploration
             Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
             u_bank[a] = Q_n + U
         #print(u_bank)
@@ -182,7 +184,7 @@ class MCTS:
                 p[0][i] *= m
         #UPDATE NODE VALUES
         self.tree[(s_hash, a_hash)].Q = v_k.reshape(1).item()
-        for a_k, p_a in enumerate(p.reshape(self.p.action_space)):
+        for a_k, p_a in enumerate(p.reshape(self.action_space)):
             if (sk_hash, a_k) not in self.tree:
                 self.tree[(sk_hash, a_k)] = self.Node()
             self.tree[(sk_hash, a_k)].P = p_a.item()

@@ -42,14 +42,14 @@
     "h_inner":400,
     "policy_inner":400,
     "reward_inner":400,
-    "state_k_inner":400,
+    "state_inner":400,
     "cross_heads":4,
     "self_heads":4,
     "h_heads":4,
     "value_heads":4,
     "policy_heads":4,
     "reward_heads":4,
-    "state_k_heads":4,
+    "state_heads":4,
     "encoder_dropout":0.5,
     "cross_dropout":0.5,
     "self_dropout":0.5,
@@ -57,7 +57,7 @@
     "value_dropout":0.5,
     "policy_dropout":0.5,
     "reward_dropout":0.5,
-    "state_k_dropout":0.5
+    "state_dropout":0.5
   },
   "training": {
     "bsz": 10,

@@ -56,3 +56,28 @@ class ToolBox:
                     f"{p1}/{m}",
                     f"{p2}/{m}"
                 ) #Overwrite active model with new model
+
+    def update_ELO(p1, p2, k = 32, tie = False):
+        """
+        Input: p1 - float representing the winning players current ELO
+               p2 - float representing the loosing players current ELO
+               k - integer representing ELO hyperparameter (default = 32) [OPTIONAL]
+               tie - boolean control for if game was a tie or not (default = False) [OPTIONAL]
+        Description: update players ELO after game
+        Output: tuple containing updated player 1 and player 2 ELO
+        """
+        R_p1 = 10 ** (p1 / 400)
+        R_p2 = 10 ** (p2 / 400)
+
+        E_p1 = R_p1 / (R_p1 + R_p2)
+        E_p2 = R_p2 / (R_p2 + R_p1)
+
+        if tie == False:
+            S_p1 = 1
+            S_p2 = 0
+        else:
+            s_p1 = S_p2 = 0.5
+
+        ELO_p1 = p1 + (k * (S_p1 - E_p1))
+        ELO_p2 = p2 + (k * (S_p2 - E_p2))
+        return (ELO_p1, ELO_p2)

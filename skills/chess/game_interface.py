@@ -93,14 +93,16 @@ class chess:
                     else:
                         legal = self.legal_moves(chess_game) #Filter legal moves for inital state
                         legal[legal == 0] = float('-inf')
-                        probs, v = a_players[i].choose_action(enc_state, legal_moves = legal)
+                        probs, v, r = a_players[i].choose_action(enc_state, legal_moves = legal)
                         max_prob = max(probs)
                         if SILENT == False:
                             print('\n--------------- STATS ---------------')
                             print(f' Player           | {p}')
                             print(f' Colour           | {"white" if chess_game.p_move > 0 else "black"}')
+                            print('- - - - - - - - - - - - - - - - - - -')
                             print(f' Value            | {v}')
-                            print(f' Move Probability | {float(max_prob)*100}%')
+                            print(f' Reward           | {r}')
+                            print(f' Probability      | {float(max_prob)*100}%')
                             print('-------------------------------------\n')
                         a_bank = [j for j, v in enumerate(probs) if v == max_prob]
                         b_a = random.choice(a_bank)
@@ -236,17 +238,24 @@ class chess:
                         else:
                             print('TIE GAME')
                             game_results['tie'] += 1
+                        b_elo = ''
                     else:
                         print(game_results)
                         if state == [1,0,0]:
                             print(f'{a_players[0]} WINS')
                             game_results[a_players[0]] += 1
+                            train_data['value'] = np.where(train_data['state0'] == 0., 1., -1.)
+                            b_elo = 0 if n_player == a_players[0] else 1
                         elif state == [0,0,1]:
                             print(f'{a_players[-1]} WINS')
                             game_results[a_players[-1]] += 1
+                            train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
+                            b_elo = 0 if n_player == a_players[-1] else 1
                         else:
                             print('TIE GAME')
                             game_results['tie'] += 1
+                            train_data['value'] = [0.] * len(train_data)
+                            b_elo = 0
                     print(game_results)
                     print()
                     #UPDATE TRAINING STATE
@@ -257,9 +266,11 @@ class chess:
                     elif sum([v for v in game_results.values()]) >= g_count:
                         m_wins = max(game_results.values())
                         winners = [p for p in game_results if game_results[p] == m_wins]
+                        print(winners)
                         if os.path.exists(f'{player}/weights') == False:
                             os.makedirs(f'{player}/weights') #Create folder
                         if len(os.listdir(f'{player}/weights')) == 0 or len(winners) == 1 and winners[0] == n_player:
+                            print('OVERWRITE')
                             ToolBox.overwrite_model(
                                 n_player,
                                 player
@@ -268,15 +279,17 @@ class chess:
                     else:
                         a_players.reverse()
                     #LOG TRAINING DATA
+                    '''
                     if state == [0,0,0]:
                         train_data['value'] = [0.] * len(train_data)
                     elif state == [1,0,0]:
                         train_data['value'] = np.where(train_data['state0'] == 0., 1., -1.)
                     else:
                         train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
+                    '''
                     train_data['reward'] = [0.] * len(train_data)
                     m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data,folder=n_player))
-                    m_log['model'] = n_player
+                    m_log['model'] = player
                     t_log = t_log.append(m_log,ignore_index=True)
                     del m_log
                     if os.path.exists(f'{player}/logs') == False:
@@ -286,6 +299,17 @@ class chess:
                         g_log = pd.read_csv(f'{player}/logs/game_log.csv')
                     else:
                         g_log = pd.DataFrame()
+                    if t == 0:
+                        train_data['ELO'] = [''] * len(train_data)
+                    else:
+                        cur_ELO = g_log['ELO'].dropna().iloc[-1] if 'ELO' in g_log and len(g_log['ELO'].dropna()) > 0 else 0
+                        ELO = ToolBox.update_ELO(
+                            cur_ELO, #ELO_p1,
+                            cur_ELO,  #ELO_p2
+                            tie = True if state == [0, 0, 0] else False
+                        )
+                        train_data['ELO'] = [ELO[b_elo]] * len(train_data)
+                        print(cur_ELO, ELO, b_elo)
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
