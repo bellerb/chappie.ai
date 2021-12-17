@@ -217,7 +217,7 @@ class Agent:
         self.m_weights['policy']['model'].train() #Turn on the train mode
         self.m_weights['state']['model'].train() #Turn on the train mode
         self.m_weights['reward']['model'].train() #Turn on the train mode
-        train_data = torch.tensor(data.values) #Set training data to a tensor
+        #train_data = torch.tensor(data.values) #Set training data to a tensor
         t_log = []
         #Start training model
         start_time = time.time() #Get time of starting process
@@ -231,17 +231,11 @@ class Agent:
                 'state loss':0,
                 'reward loss':0.
             }
-            for batch, i in enumerate(range(0, train_data.size(0) - 1, self.bsz)):
-                state, s_targets, p_targets, v_targets, r_targets = self.get_batch(train_data, i, self.bsz) #Get batch data with the selected targets being masked
+            for batch, i in enumerate(range(0, len(data), self.bsz)):
+                state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.bsz) #Get batch data with the selected targets being masked
+
                 h = self.m_weights['representation']['model'](state)
-
-                a = torch.argmax(p_targets, dim = -1)
-                for j in range(a.size(-1)-1):
-                    a[len(a) - j - 1] = a[len(a) - j - 2]
-                a[0] = 0
-                a = rearrange(a, '(y x) -> y x ', x = 1)
-
-                d = self.m_weights['backbone']['model'](h, a)
+                d = self.m_weights['backbone']['model'](h, a_targets)
                 v = self.m_weights['value']['model'](d)
                 p = self.m_weights['policy']['model'](d)
                 s = self.m_weights['state']['model'](d)
@@ -278,7 +272,7 @@ class Agent:
                 g_optimizer.step()
 
                 h = self.m_weights['representation']['model'](state)
-                d = self.m_weights['backbone']['model'](h, a)
+                d = self.m_weights['backbone']['model'](h, a_targets)
                 v = self.m_weights['value']['model'](d)
                 p = self.m_weights['policy']['model'](d)
                 s = self.m_weights['state']['model'](d)
@@ -327,12 +321,12 @@ class Agent:
                 r_optimizer.step()
 
                 t_steps += 1
-            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {train_data.size(0)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}\n')
+            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}\n')
             t_log.append({
                 **{
                     'Date':datetime.now(),
                     'Epoch':epoch,
-                    'Samples':train_data.size(0),
+                    'Samples':len(data),
                     'Time':time.time() - start_time
                 },
                 **{k:(v/t_steps) for k,v in total_loss.items()}
@@ -346,38 +340,43 @@ class Agent:
             }, f"{folder}/weights/{self.m_weights[m]['param']}" if folder is not None else self.m_weights[m]['param'])
         return t_log
 
-    def get_batch(self, source, x, y):
+    def get_batch(self, source, x, y, v_h = 'value', r_h = 'reward', s_h = 'state', p_h = 'prob', a_h = 'action'):
         """
         Input: source - pytorch tensor containing data you wish to get batches from
                x - integer representing the index of the data you wish to gather
                y - integer representing the amount of rows you want to grab
         Description: Generate input and target data for training model
-        Output: tuple of pytorch tensors containing input and target data [x, p, v, r]
+        Output: tuple of pytorch tensors containing input and target data [x, x + 1, p, v, r, a]
         """
-        data = torch.tensor([])
-        v_target = torch.tensor([])
-        r_target = torch.tensor([])
-        p_target = torch.tensor([])
-        s_target = torch.tensor([])
-        for i in range(y):
-            if len(source) > 0 and x + i < len(source):
-                d_seq = source[x + i][:len(source[x + i]) - (self.action_space + 2)]
-                data = torch.cat((data, d_seq))
-                if x + i < len(source) - 1:
-                    s_seq = source[x + i + 1][:len(source[x + i + 1]) - (self.action_space + 2)]
-                else:
-                    s_seq = source[x + i][:len(source[x + i]) - (self.action_space + 2)]
-                s_target = torch.cat((s_target, s_seq))
-                v_seq = source[x + i][-2].reshape(1)
-                v_target = torch.cat((v_target, v_seq))
-                r_seq = source[x + i][-1].reshape(1)
-                r_target = torch.cat((r_target, r_seq))
-                p_seq = source[x + i][-(self.action_space + 2):-2]
-                p_target = torch.cat((p_target, p_seq))
+        v_headers = [v_h]
+        r_headers = [r_h]
+        a_headers = [a_h]
+        s_headers = [h for h in source if s_h in h]
+        p_headers = [h for h in source if p_h in h]
+
+        state = source[s_headers].iloc[x:x+y]
+
+        s_target = source[s_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
+        if True in s_target.iloc[-1].isna().tolist():
+            s_target.iloc[-1] = state.iloc[-1]
+            s_target[f'{s_h}0'].iloc[-1] = 0 if s_target[f'{s_h}0'].iloc[-1] == 1 else 1
+        s_target = torch.tensor(s_target.values)
+
+        state = torch.tensor(state.values)
+
+        p_target = torch.tensor(source[p_headers].iloc[x:x+y].values)
+        v_target = torch.tensor(source[v_headers].iloc[x:x+y].values)
+        r_target = torch.tensor(source[r_headers].iloc[x:x+y].values)
+
+        a_target = source[a_headers].shift(axis = 0).iloc[x:x+y]
+        if True in a_target.iloc[0].isna().tolist():
+            a_target.iloc[0] = -1
+        a_target = torch.tensor((a_target + 1).values)
         return (
-            data.reshape(min(y, len(source[x:])), len(source[0]) - (self.action_space + 2)).to(torch.int64),
-            s_target.reshape(min(y, len(source[x:])), len(source[0]) - (self.action_space + 2)).to(torch.int64),
-            p_target.reshape(min(y, len(source[x:])), self.action_space).to(torch.float),
-            v_target.reshape(min(y, len(source[x:])), 1).to(torch.float),
-            r_target.reshape(min(y, len(source[x:])), 1).to(torch.float)
+            state.to(torch.int64),
+            s_target.to(torch.int64),
+            p_target.to(torch.float),
+            v_target.to(torch.float),
+            r_target.to(torch.float),
+            a_target.to(torch.int64)
         )

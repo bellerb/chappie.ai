@@ -14,7 +14,7 @@ if __name__ == '__main__':
     ]
     task = -1
     while True:
-        u_in = input(''.join(f'*{o}\n' for o in o_bank))
+        u_in = input(''.join(f'* {o}\n' for o in o_bank))
         for i, o in enumerate(o_bank):
             o_hold = str(o).lower().split(' ')
             if str(u_in).lower() == str(o_hold[0]).lower() or str(u_in).lower() == str(o_hold[0]).lower()+' '+str(o_hold[1]).lower() or str(u_in).lower() == str(o_hold[-1]).replace('(','').replace(')','').lower():
@@ -46,9 +46,9 @@ if __name__ == '__main__':
         chess = chess(train = True)
         chess.traing_session(
             loops = 1,
-            games = 1,
+            games = 15,
             boards = 1,
-            best_of = 1,
+            best_of = 3,
             player = 'skills/chess/data/models/test',
             SILENT = False
         )

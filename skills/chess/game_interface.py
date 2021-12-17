@@ -4,6 +4,7 @@ import random
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+from string import ascii_uppercase, digits
 from shutil import copyfile, rmtree, copytree
 from datetime import datetime
 
@@ -122,13 +123,15 @@ class chess:
                         next_pos = chess_game.board_2_array(next)
                         if a_players[i] == 'human':
                             log.append({
-                                **{f'state{i}':float(s) for i,s in enumerate(plumbing.encode_state(chess_game)[0])},
-                                **{f'action{x}':1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)}
+                                **{f'state{i}':float(s) for i,s in enumerate(enc_state[0])},
+                                **{f'prob{x}':1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)},
+                                **{'action':b_a}
                             })
                         else:
                             log.append({
-                                **{f'state{i}':float(s) for i,s in enumerate(plumbing.encode_state(chess_game)[0])},
-                                **{f'prob{x}':p for x, p in enumerate(probs)}
+                                **{f'state{i}':float(s) for i,s in enumerate(enc_state[0])},
+                                **{f'prob{x}':p for x, p in enumerate(probs)},
+                                **{'action':b_a}
                             })
                         if SILENT == False or a_players[i] == 'human':
                             if chess_game.p_move > 0:
@@ -232,12 +235,15 @@ class chess:
                         if state == [1,0,0]:
                             print(f'WHITE WINS')
                             game_results['white'] += 1
+                            train_data['value'] = np.where(train_data['state0'] == 0., 1., -1.)
                         elif state == [0,0,1]:
                             print(f'BLACK WINS')
                             game_results['black'] += 1
+                            train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
                         else:
                             print('TIE GAME')
                             game_results['tie'] += 1
+                            train_data['value'] = [0.] * len(train_data)
                         b_elo = ''
                     else:
                         print(game_results)
@@ -279,14 +285,6 @@ class chess:
                     else:
                         a_players.reverse()
                     #LOG TRAINING DATA
-                    '''
-                    if state == [0,0,0]:
-                        train_data['value'] = [0.] * len(train_data)
-                    elif state == [1,0,0]:
-                        train_data['value'] = np.where(train_data['state0'] == 0., 1., -1.)
-                    else:
-                        train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
-                    '''
                     train_data['reward'] = [0.] * len(train_data)
                     m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data,folder=n_player))
                     m_log['model'] = player
@@ -310,6 +308,7 @@ class chess:
                         )
                         train_data['ELO'] = [ELO[b_elo]] * len(train_data)
                         print(cur_ELO, ELO, b_elo)
+                    train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15,15)))
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
