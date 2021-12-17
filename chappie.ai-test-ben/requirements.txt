@@ -1,5 +1,0 @@
-pytorch
-pandas
-numpy
-tdqm
-einops
