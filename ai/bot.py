@@ -4,6 +4,7 @@ import json
 import torch
 import random
 import numpy as np
+import pandas as pd
 
 from tqdm import tqdm
 
@@ -217,7 +218,6 @@ class Agent:
         self.m_weights['policy']['model'].train() #Turn on the train mode
         self.m_weights['state']['model'].train() #Turn on the train mode
         self.m_weights['reward']['model'].train() #Turn on the train mode
-        #train_data = torch.tensor(data.values) #Set training data to a tensor
         t_log = []
         #Start training model
         start_time = time.time() #Get time of starting process
@@ -342,10 +342,14 @@ class Agent:
 
     def get_batch(self, source, x, y, v_h = 'value', r_h = 'reward', s_h = 'state', p_h = 'prob', a_h = 'action'):
         """
-        Input: source - pytorch tensor containing data you wish to get batches from
+        Input: source - dataframe containing training data for the model
                x - integer representing the index of the data you wish to gather
                y - integer representing the amount of rows you want to grab
-        Description: Generate input and target data for training model
+               v_h - string representing the value header (default = 'value') [OPTIONAL]
+               r_h - string representing the reward header (default = 'reward') [OPTIONAL]
+               s_h - string representing the state header (default = 'state') [OPTIONAL]
+               a_h - string representing the action header (default = 'action') [OPTIONAL]
+        Description: Get batch of training data
         Output: tuple of pytorch tensors containing input and target data [x, x + 1, p, v, r, a]
         """
         v_headers = [v_h]
@@ -354,24 +358,48 @@ class Agent:
         s_headers = [h for h in source if s_h in h]
         p_headers = [h for h in source if p_h in h]
 
-        state = source[s_headers].iloc[x:x+y]
+        s = source[s_headers].iloc[x:x+y]
+        p = source[p_headers].iloc[x:x+y]
+        v = source[v_headers].iloc[x:x+y]
+        r = source[r_headers].iloc[x:x+y]
+        a = source[a_headers].iloc[x:x+y] + 1
 
-        s_target = source[s_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
-        if True in s_target.iloc[-1].isna().tolist():
-            s_target.iloc[-1] = state.iloc[-1]
-            s_target[f'{s_h}0'].iloc[-1] = 0 if s_target[f'{s_h}0'].iloc[-1] == 1 else 1
-        s_target = torch.tensor(s_target.values)
+        a_0 = pd.DataFrame([{a_h:0} for _ in range(len(a))])
 
+        s_1 = source[s_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
+        if True in s_1.iloc[-1].isna().tolist():
+            s_1.iloc[-1] = s.iloc[-1]
+            s_1[f'{s_h}0'].iloc[-1] = 0 if s_1[f'{s_h}0'].iloc[-1] == 1 else 1
+
+        p_1 = source[p_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
+        if True in p_1.iloc[-1].isna().tolist():
+            p_1.iloc[-1] = p.iloc[-1]
+
+        v_1 = source[v_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
+        if True in v_1.iloc[-1].isna().tolist():
+            v_1.iloc[-1] = v.iloc[-1]
+
+        r_1 = source[r_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
+        if True in r_1.iloc[-1].isna().tolist():
+            r_1.iloc[-1] = r.iloc[-1]
+
+        state = s.append(s, ignore_index = True)
         state = torch.tensor(state.values)
 
-        p_target = torch.tensor(source[p_headers].iloc[x:x+y].values)
-        v_target = torch.tensor(source[v_headers].iloc[x:x+y].values)
-        r_target = torch.tensor(source[r_headers].iloc[x:x+y].values)
+        s_target = s.append(s_1, ignore_index = True)
+        s_target = torch.tensor(s_target.values)
 
-        a_target = source[a_headers].shift(axis = 0).iloc[x:x+y]
-        if True in a_target.iloc[0].isna().tolist():
-            a_target.iloc[0] = -1
-        a_target = torch.tensor((a_target + 1).values)
+        p_target = p.append(p_1, ignore_index = True)
+        p_target = torch.tensor(p_target.values)
+
+        v_target = v.append(v_1, ignore_index = True)
+        v_target = torch.tensor(v_target.values)
+
+        r_target = r.append(r_1, ignore_index = True)
+        r_target = torch.tensor(r_target.values)
+
+        a_target = a_0.append(a, ignore_index = True)
+        a_target = torch.tensor(a_target.values)
         return (
             state.to(torch.int64),
             s_target.to(torch.int64),

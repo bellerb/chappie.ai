@@ -31,8 +31,8 @@ class chess:
         Description: returns all legal moves
         Output: numpy array containing all legal moves
         """
-        legal = np.zeros((8,8,8,8))
-        for cur,moves in chess_game.possible_board_moves(capture=True).items():
+        legal = np.zeros((8, 8, 8, 8))
+        for cur, moves in chess_game.possible_board_moves(capture=True).items():
             if len(moves) > 0 and ((cur[0].isupper() and chess_game.p_move == 1) or (cur[0].islower() and chess_game.p_move == -1)):
                 cur_pos = chess_game.board_2_array(cur)
                 for next in moves:
@@ -57,7 +57,7 @@ class chess:
                train - boolean used as training control (default = False) [OPTIONAL]
                EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
                SILENT - boolean used for control of displaying stats or not (default = True) [OPTIONAL]
-               players - list containing the player paramater files (default = ['skills/chess/data/active_param.json','human']
+               players - list containing the player paramater files (default = ['skills/chess/data/active_param.json', 'human']
         Description: play a game of chess
         Output: tuple containing the game outcome and a dataframe containing the game log
         """
@@ -109,12 +109,12 @@ class chess:
                         b_a = random.choice(a_bank)
                         a_map = np.zeros(4096)
                         a_map[b_a] = 1
-                        a_map = a_map.reshape((8,8,8,8))
+                        a_map = a_map.reshape((8, 8, 8, 8))
                         a_index = [(cy, cx, ny, nx) for cy, cx, ny, nx in zip(*np.where(a_map == 1))][0]
                         cur = f'{chess_game.x[a_index[1]]}{chess_game.y[a_index[0]]}'
                         next = f'{chess_game.x[a_index[3]]}{chess_game.y[a_index[2]]}'
                     valid = False
-                    if chess_game.move(cur,next) == False:
+                    if chess_game.move(cur, next) == False:
                         if SILENT == False or str(p).lower() in human_code:
                             print('Invalid move')
                     else:
@@ -123,13 +123,13 @@ class chess:
                         next_pos = chess_game.board_2_array(next)
                         if a_players[i] == 'human':
                             log.append({
-                                **{f'state{i}':float(s) for i,s in enumerate(enc_state[0])},
+                                **{f'state{i}':float(s) for i, s in enumerate(enc_state[0])},
                                 **{f'prob{x}':1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)},
                                 **{'action':b_a}
                             })
                         else:
                             log.append({
-                                **{f'state{i}':float(s) for i,s in enumerate(enc_state[0])},
+                                **{f'state{i}':float(s) for i, s in enumerate(enc_state[0])},
                                 **{f'prob{x}':p for x, p in enumerate(probs)},
                                 **{'action':b_a}
                             })
@@ -141,14 +141,14 @@ class chess:
                         if a_players[i] != 'human':
                             state = chess_game.check_state(chess_game.EPD_hash())
                             if state == '50M' or state == '3F':
-                                state = [0,1,0] #Auto tie
+                                state = [0, 1, 0] #Auto tie
                             elif state == 'PP':
                                 chess_game.pawn_promotion(n_part='Q') #Auto queen
-                            if state != [0,1,0]:
+                            if state != [0, 1, 0]:
                                 state = chess_game.is_end()
                         else:
                             state = chess_game.is_end()
-                            if state == [0,0,0]:
+                            if state == [0, 0, 0]:
                                 if chess_game.check_state(chess_game.EPD_hash()) == 'PP':
                                     chess_game.pawn_promotion()
                         if sum(state) > 0:
@@ -183,7 +183,7 @@ class chess:
                best_of = integer representing the amount of games to use in a round-robin (default = 5) [OPTIONAL]
                EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
                SILENT - boolean used for control of displaying stats or not (default = True) [OPTIONAL]
-               players - list of player parameters (default = [{'param':'skills/chess/data/new_param.json','train':True}] [OPTIONAL]
+               players - list of player parameters (default = [{'param':'skills/chess/data/new_param.json', 'train':True}] [OPTIONAL]
         Description: train ai by playing multiple games of chess
         Output: None
         """
@@ -232,11 +232,11 @@ class chess:
                         players = a_players
                     )
                     if t == 0:
-                        if state == [1,0,0]:
+                        if state == [1, 0, 0]:
                             print(f'WHITE WINS')
                             game_results['white'] += 1
                             train_data['value'] = np.where(train_data['state0'] == 0., 1., -1.)
-                        elif state == [0,0,1]:
+                        elif state == [0, 0, 1]:
                             print(f'BLACK WINS')
                             game_results['black'] += 1
                             train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
@@ -247,12 +247,12 @@ class chess:
                         b_elo = ''
                     else:
                         print(game_results)
-                        if state == [1,0,0]:
+                        if state == [1, 0, 0]:
                             print(f'{a_players[0]} WINS')
                             game_results[a_players[0]] += 1
                             train_data['value'] = np.where(train_data['state0'] == 0., 1., -1.)
                             b_elo = 0 if n_player == a_players[0] else 1
-                        elif state == [0,0,1]:
+                        elif state == [0, 0, 1]:
                             print(f'{a_players[-1]} WINS')
                             game_results[a_players[-1]] += 1
                             train_data['value'] = np.where(train_data['state0'] == 0., -1., 1.)
@@ -286,9 +286,9 @@ class chess:
                         a_players.reverse()
                     #LOG TRAINING DATA
                     train_data['reward'] = [0.] * len(train_data)
-                    m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data,folder=n_player))
+                    m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player))
                     m_log['model'] = player
-                    t_log = t_log.append(m_log,ignore_index=True)
+                    t_log = t_log.append(m_log, ignore_index=True)
                     del m_log
                     if os.path.exists(f'{player}/logs') == False:
                         os.makedirs(f'{player}/logs') #Create folder
@@ -308,7 +308,7 @@ class chess:
                         )
                         train_data['ELO'] = [ELO[b_elo]] * len(train_data)
                         print(cur_ELO, ELO, b_elo)
-                    train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15,15)))
+                    train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
