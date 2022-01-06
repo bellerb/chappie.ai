@@ -1,6 +1,6 @@
 # Skills
 ### Description
-Folder where all interaction with exteral tasks occur. For each task a small wrapper is created that the AI interacts with. New models are trained for ever task individually with custom paramaters specific to the task at hand.
+Folder where all interaction with exteral tasks occur. For each task a small wrapper is created that the AI interacts with. New models are trained for every task individually with custom paramaters specific to the task at hand.
 
 # Parameter Example
 ```
