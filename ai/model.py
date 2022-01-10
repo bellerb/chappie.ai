@@ -88,7 +88,7 @@ class Attention(nn.Module):
         #b:batches, y:y-axis, q:q x-axis, k: k x-axis
         #print('q',q.size())
         #print('k',k.size())
-        z = torch.einsum('b q y, b k y -> b k q', q, k) / (x.size(-1)**(0.5)) #Scaled dot-product [QK.T/sqrt(dk)]
+        z = torch.einsum('b q y, b k y -> b k q', q, k) / (x.size(-1) ** (0.5)) #Scaled dot-product [QK.T/sqrt(dk)]
 
         if mask is not None:
             mask_expanded = mask.unsqueeze(1).expand_as(z)
@@ -145,9 +145,9 @@ class DecoderOnlyTransformer(nn.Module):
         Output: None
         """
         z = self.self_attention(x)
-        z = nn.functional.normalize(z, dim=-1)
+        z = nn.functional.normalize(z, dim = -1)
         z = self.linear(z)
-        z = nn.functional.normalize(z, dim=-1)
+        z = nn.functional.normalize(z, dim = -1)
         z = self.GELU(z)
         return z
 
