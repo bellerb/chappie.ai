@@ -3,7 +3,7 @@ from math import log
 import torch
 from torch import nn
 
-from einops import rearrange, repeat
+from einops import rearrange, repeat, reduce
 
 class Attention(nn.Module):
     """
@@ -101,6 +101,80 @@ class Attention(nn.Module):
         z = rearrange(z, '(b h) y x -> b y (h x)', h = self.heads) #Concat data
         z = self.output(z)
         return z
+
+class ChunkedCrossAttention(nn.Module):
+    """
+    Chunked Cross-Attention Block
+    """
+    def __init__(
+        self,
+        input_size,
+        layer_size = 64,
+        heads = 1,
+        dropout = 0.5,
+        n = 12, #Sequence length
+        m = 4, #Chunk length
+        k = 2, #Amount of neighbours
+        r = 5, #Retrieval length
+        d = 2 #Embedding size
+    ):
+        """
+        Input: input_size - integer representing the size of the input data
+               layer_size - integer representing the size of the layers (default = 64) [OPTIONAL]
+               heads - integer representing the amount of heads to use (default = 1) [OPTIONAL]
+               dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize decoder only transformer class creating the appropiate layers
+        Output: None
+        """
+        super(ChunkedCrossAttention, self).__init__()
+        self.n = n #Sequence length
+        self.m = m #Chunk length
+        self.k = k #Amount of neighbours
+        self.r = r #Retrieval length
+        self.d = d #Embedding size
+        self.l = self.n // self.m #Number of chunks
+        self.cross_attention = Attention(
+            input_size,
+            layer_size = layer_size,
+            heads = heads,
+            dropout = dropout
+        )
+
+    def forward(self, x, neighbours):
+        """
+        Input: x - tensor containing input data for decoder only transformer
+        Description: Forward pass of decoder only transformer
+        Output: None
+        """
+        attending_chunks = nn.functional.pad(x[self.m - 1:], (0, 0, 0, self.m - 1), mode='constant').reshape(self.l, self.m, self.d)
+
+        chunked_output = torch.tensor([])
+        for u in range(self.l - 1):
+            chunk = attending_chunks[u].reshape((1, self.m, self.d)) #First chunk
+            c_neighbours = neighbours[u] #Chunk neighbours
+            chunks = torch.tensor([])
+            for neighbour in c_neighbours:
+                neighbour = neighbour.reshape((1, self.r, self.d))
+                z = self.cross_attention(chunk, neighbour)
+                chunks = torch.cat([chunks, z])
+            chunks = reduce(chunks, 'k m d -> m d', 'mean')
+            chunked_output = torch.cat([chunked_output, chunks])
+
+        chunked_output = torch.cat([chunked_output, attending_chunks[-1]])
+
+        chunked_output = nn.functional.pad(chunked_output, (0, 0, self.m - 1, 0), mode='constant')[:self.n]
+
+        chunked_output[:self.m - 1] = x[:self.m - 1]
+
+        chunk = x[-1].reshape((1, 1, self.d)) #Last value in chunks
+        chunks = torch.tensor([])
+        for neighbour in neighbours[-1]:
+            neighbour = neighbour.reshape((1, self.r, self.d))
+            z = self.cross_attention(chunk, neighbour)
+            chunks = torch.cat([chunks, z])
+        chunks = reduce(chunks, 'k m d -> m d', 'mean')
+        chunked_output[- 1] = chunks
+        return chunked_output
 
 class DecoderOnlyTransformer(nn.Module):
     """

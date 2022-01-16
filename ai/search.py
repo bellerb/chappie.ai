@@ -17,6 +17,7 @@ class MCTS:
         policy,
         state,
         reward,
+        Cca = None,
         action_space = 4096,
         user = None,
         c1 = 1.25,
@@ -57,6 +58,7 @@ class MCTS:
         self.p = policy #Model used for policy
         self.s = state #Model used for state
         self.r = reward #Model used for reward
+        self.Cca = Cca #Model used for chunked cross-attention
         self.single_player = single_player #Control for if the task is single player or not
 
     class Node:
@@ -114,7 +116,7 @@ class MCTS:
         a_bank = [k for k,v in u_bank.items() if v == m_u]
         return random.choice(a_bank)
 
-    def search(self, s, train = False, a = None):
+    def search(self, s, train = False, a = None, e_db = None):
         """
         Input: s - tensor representing hidden state of task
                a - integer representing which action is being performed (default = None) [OPTIONAL]
@@ -132,6 +134,55 @@ class MCTS:
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
                 d_k = self.g(s, a + 1) #backbone function
+                r_k = self.r(d_k) #reward function
+                s_k = self.s(d_k) #next state function
+            s = s_k.reshape(s.size())
+            self.tree[(s_hash, a_hash)].S = s
+            self.tree[(s_hash, a_hash)].R = r_k.reshape(1).item()
+        elif a is not None and self.tree[(s_hash, a_hash)].S is not None:
+            s = self.tree[(s_hash, a_hash)].S
+        sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
+        if self.tree[(s_hash, a_hash)].N == 0:
+            #EXPANSION ---
+            self.expand_tree(s, s_hash, a_hash, sk_hash)
+        elif self.l < self.max_depth:
+            a_k = torch.tensor(self.pUCT(sk_hash)) #Find best action to perform @ [sk]
+            a_k = a_k.reshape((1,1))
+            self.l += 1
+            #BACKUP ---
+            v_1  = self.search(s, a = a_k) #Go level deeper
+            G = self.tree[(s_hash, a_hash)].R + (self.g_d * v_1)
+            self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1) #Updated value
+        if self.tree[(s_hash, a_hash)].Q < self.Q_min:
+            self.Q_min = self.tree[(s_hash, a_hash)].Q
+        if self.tree[(s_hash, a_hash)].Q > self.Q_max:
+            self.Q_max = self.tree[(s_hash, a_hash)].Q
+
+        self.tree[(s_hash, a_hash)].N += 1
+        return self.tree[(s_hash, a_hash)].Q if self.single_player == True else -self.tree[(s_hash, a_hash)].Q
+
+    def search_V2(self, s, train = False, a = None, e_db = None):
+        """
+        Input: s - tensor representing hidden state of task
+               a - integer representing which action is being performed (default = None) [OPTIONAL]
+               train - boolean representing if search is being used in training mode (default = False) [OPTIONAL]
+        Description: Search the task action tree using upper confidence value
+        Output: predicted value
+        """
+        if a is not None:
+            a_hash = deepcopy(a.reshape(1).item())
+        else:
+            a_hash = None
+        s_hash = self.state_hash(s) #Create hash of state [sk-1] for game tree
+        if (s_hash, a_hash) not in self.tree:
+            self.tree[(s_hash, a_hash)] = self.Node() #Initialize new game tree node
+        if a is not None and self.tree[(s_hash, a_hash)].S is None:
+            with torch.no_grad():
+                d_k = self.g(s, a + 1) #backbone function
+                if e_db is not None:
+                    chunks = d_k.reshape(self.Cca.l, self.Cca.m, self.Cca.d)[:self.Cca.l - 1]
+                    neighbours = ToolBox.get_kNN(chunks, e_db)
+                    d_k = self.Cca(d_k, neighbours) #chunked cross-attention
                 r_k = self.r(d_k) #reward function
                 s_k = self.s(d_k) #next state function
             s = s_k.reshape(s.size())

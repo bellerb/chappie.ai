@@ -38,7 +38,8 @@ if __name__ == '__main__':
             0,
             #EPD = '1b4k1/Q7/p2np1/P1P2p2/1P3P2/1R5R/q6P/5rK1 b - -',
             players = [
-                'skills/chess/data/models/test',
+                #'skills/chess/data/models/test',
+                'skills/chess/data/models/test_V2',
                 'human'
             ]
         )
@@ -49,6 +50,7 @@ if __name__ == '__main__':
             games = 15,
             boards = 1,
             best_of = 3,
-            player = 'skills/chess/data/models/test',
+            #player = 'skills/chess/data/models/test',
+            player = 'skills/chess/data/models/test_V2',
             SILENT = False
         )

@@ -8,7 +8,8 @@ from string import ascii_uppercase, digits
 from shutil import copyfile, rmtree, copytree
 from datetime import datetime
 
-from ai.bot import Agent
+#from ai.bot import Agent
+from ai.bot_V2 import Agent
 from tasks.games.chess.chess import Chess
 from skills.chess.game_plumbing import Plumbing
 from tools.toolbox import ToolBox
@@ -17,14 +18,6 @@ class chess:
     """
     Main interface for the AI to play chess
     """
-    def __init__(self, train = False):
-        """
-        Input: train - boolean representing if the game is being played in training mode or not
-        Description: initalize chess game
-        Output: None
-        """
-        self.train = train
-
     def legal_moves(self, chess_game):
         """
         Input: chess_game - object containing the current chess game

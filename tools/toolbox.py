@@ -1,3 +1,4 @@
+import torch
 from time import sleep
 from os import listdir
 from os.path import exists
@@ -5,6 +6,20 @@ from shutil import copyfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 class ToolBox:
+    def get_kNN(chunks, e_db, k = 2):
+        """
+        Input: chunks - tensor containing initial data
+               e_db - dataframe containing embeddings
+        Description: find k-nearest-neighbours of input tensor
+        Output: tensor containing the k-nearest-neighbours of input tensor
+        """
+        neighbours = torch.tensor([])
+        for chunk in chunks:
+            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x[0])).item(), axis=1)
+            kNN = torch.tensor([e_db.nsmallest(k, ['L2'])[0].tolist()])
+            neighbours = torch.cat([neighbours, kNN])
+        return neighbours
+
     def multi_process(func, workers = None):
         """
         Input: func - list of dicitonary's containing the functions you want to run in parallel
