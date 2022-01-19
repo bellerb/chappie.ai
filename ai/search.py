@@ -6,6 +6,8 @@ from numpy import isnan
 from numpy.random import dirichlet
 #import hashlib
 
+from tools.toolbox import ToolBox
+
 class MCTS:
     """
     Monte Carlo Tree Search algorithm used to search game tree for the best move
@@ -161,7 +163,7 @@ class MCTS:
         self.tree[(s_hash, a_hash)].N += 1
         return self.tree[(s_hash, a_hash)].Q if self.single_player == True else -self.tree[(s_hash, a_hash)].Q
 
-    def search_V2(self, s, train = False, a = None, e_db = None):
+    def search_V2(self, s, train = False, e_db = None, a = None):
         """
         Input: s - tensor representing hidden state of task
                a - integer representing which action is being performed (default = None) [OPTIONAL]
@@ -180,9 +182,11 @@ class MCTS:
             with torch.no_grad():
                 d_k = self.g(s, a + 1) #backbone function
                 if e_db is not None:
+                    d_k = torch.squeeze(d_k)
                     chunks = d_k.reshape(self.Cca.l, self.Cca.m, self.Cca.d)[:self.Cca.l - 1]
                     neighbours = ToolBox.get_kNN(chunks, e_db)
                     d_k = self.Cca(d_k, neighbours) #chunked cross-attention
+                    d_k = d_k.reshape(1, d_k.size(0), d_k.size(1))
                 r_k = self.r(d_k) #reward function
                 s_k = self.s(d_k) #next state function
             s = s_k.reshape(s.size())
@@ -199,7 +203,7 @@ class MCTS:
             a_k = a_k.reshape((1,1))
             self.l += 1
             #BACKUP ---
-            v_1  = self.search(s, a = a_k) #Go level deeper
+            v_1  = self.search_V2(s, a = a_k, e_db = e_db) #Go level deeper
             G = self.tree[(s_hash, a_hash)].R + (self.g_d * v_1)
             self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1) #Updated value
         if self.tree[(s_hash, a_hash)].Q < self.Q_min:
