@@ -7,7 +7,8 @@
       "value":"v.pth.tar",
       "policy":"p.pth.tar",
       "state":"s.pth.tar",
-      "reward":"r.pth.tar"
+      "reward":"r.pth.tar",
+      "cca":"cca.pth.tar"
     }
   },
   "search":{
@@ -61,7 +62,7 @@
     "reward_dropout":0.5,
     "state_dropout":0.5,
     "chunked_dropout":0.5,
-    "chunk_length":20,
+    "chunked_length":4,
     "neighbour_amt":2
   },
   "training": {
