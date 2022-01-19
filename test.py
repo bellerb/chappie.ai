@@ -1,74 +1,77 @@
 import os
+import json
 import torch
 import pandas as pd
 
 from tools.toolbox import ToolBox
-from ai.model import ChunkedCrossAttention, DecoderOnlyTransformer
+from ai.model import ChunkedCrossAttention, DecoderOnlyTransformer, Representation, Backbone
 
-n = 12 #Sequence length
+param_name = 'skills/chess/data/models/test_V2/parameters.json'
+
+Device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if os.path.exists(param_name):
+    with open(param_name) as f:
+        m_param = json.load(f)
+else:
+    raise Exception('ERROR - Supplied model parameter file does not exist.')
+
+p_model = m_param['model']
+representation = Representation(
+    p_model['latent_size'],
+    ntoken = p_model['ntoken'],
+    embedding_size = p_model['embedding_size'],
+    padding_idx = p_model['padding_idx'],
+    encoder_dropout = p_model['encoder_dropout'],
+    h_inner = p_model['h_inner'],
+    h_heads = p_model['h_heads'],
+    h_dropout = p_model['h_dropout']
+).to(Device)
+
+backbone = Backbone(
+    p_model['latent_size'],
+    action_space = p_model['action_space'],
+    embedding_size = p_model['embedding_size'],
+    perceiver_inner = p_model['perceiver_inner'],
+    recursions = p_model['g_recursions'],
+    transformer_blocks = p_model['transformer_blocks'],
+    cross_heads = p_model['cross_heads'],
+    self_heads = p_model['self_heads'],
+    cross_dropout = p_model['cross_dropout'],
+    self_dropout = p_model['self_dropout']
+).to(Device)
+
+e_db = ToolBox.build_embedding_db(representation, backbone, f_name = 'skills/chess/data/models/test_V2/logs/game_log.csv')
+
+x = torch.tensor(e_db.iloc[5][0])
+#print(x)
+print(x.shape)
+
+n = x.size(0) #Sequence length
 m = 4 #Chunk length
 k = 2 #Amount of neighbours
-r = 5 #Retrieval length
-d = 2 #Embedding size
+d = x.size(-1) #Embedding size
 l = n // m #Number of chunks
-t = 50 #Amount of tokens in db
 
-#x = torch.rand(n, d)
-#print(x)
-
-def build_embedding_db(f_name = None, s_header = 'state'):
-    if f_name is not None and os.path.isfile(f_name):
-        t_db = pd.read_csv(f_name)
-        t_db = t_db[[h for h in t_db if s_header in h]].drop_duplicates()
-    else:
-        t_db = None
-    print(t_db)
-    if t_db is not None:
-        e_db = torch.tensor(t_db.values)
-    else:
-        e_db = None
-    print(e_db)
-    return e_db
-
-e_db = build_embedding_db(f_name = 'skills/chess/data/models/test_V2/logs/game_log.csv')
-quit()
-'''
-e_db = []
-for emb in torch.rand(t, r, d):
-    e_db.append([emb.tolist()])
-e_db = pd.DataFrame(e_db)
-#print(e_db)
-'''
-
-chunks = torch.rand(l - 1, r, d)
+chunks = x.reshape(l, m, d)
+#print(chunks)
+print(chunks.shape)
 
 neighbours = ToolBox.get_kNN(chunks, e_db)
 #print(neighbours)
-
-Transformer = DecoderOnlyTransformer(
-    neighbours.size(-1),
-    layer_size = 64,
-    heads = 1,
-    dropout = 0.5
-)
-
-x = Transformer(x.resize(1, n, d)).resize(n, d)
-print(x)
-
-for u in range(len(neighbours)):
-    neighbours[u] = Transformer(neighbours[u])
+print(neighbours.shape)
 
 Cca = ChunkedCrossAttention(
     x.size(-1),
     layer_size = 64,
     heads = 1,
     dropout = 0.5,
-    n = x.size(0), #Sequence length
+    n = n, #Sequence length
     m = m, #Chunk length
     k = k, #Amount of neighbours
-    r = r, #Retrieval length
+    r = neighbours.size(2), #Retrieval length
     d = d #Embedding size
 )
 
 z = Cca(x, neighbours)
-print(z)
+#print(z)
+print(z.shape)

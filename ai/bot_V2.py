@@ -168,7 +168,7 @@ class Agent:
         #Expand first node of game tree
         with torch.no_grad():
             h_s = self.m_weights['representation']['model'](state)
-            d = self.m_weights['backbone']['model'](h_s, torch.tensor([[0]])) #backbone function
+            d = self.m_weights['backbone']['model'](h_s, torch.zeros(1,1).to(torch.long)) #backbone function
             if e_db is not None:
                 chunks = d.reshape(l, m, d)[:l - 1]
                 neighbours = ToolBox.get_kNN(chunks, e_db)

@@ -6,6 +6,34 @@ from shutil import copyfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 class ToolBox:
+    def build_embedding_db(representation, backbone, f_name = None, s_header = 'state'):
+        """
+        Input: representation - model used to create game state representations
+               backbone - model used as the backbone of our multi task model
+               f_name - string representing the game state data (default = None) [OPTIONAL]
+               s_header - string representing the main name used in game state token database (default = 'state') [OPTIONAL]
+        Description: builds embedding database from tokens
+        Output: dataframe containing embeddings
+        """
+        if f_name is not None and os.path.isfile(f_name):
+            t_db = pd.read_csv(f_name)
+            t_db = t_db[[h for h in t_db if s_header in h]].drop_duplicates()
+        else:
+            t_db = None
+        if t_db is not None:
+            headers = [h for h in t_db]
+            e_db = []
+            for i, row in t_db.iterrows():
+                hold = torch.tensor(row[headers].values).to(torch.long).reshape(1, len(headers))
+                hold = representation(hold)
+                hold = backbone(hold, torch.zeros(1, 1).to(torch.long))
+                e_db.append(hold.tolist())
+            del hold
+            e_db = pd.DataFrame(e_db)
+        else:
+            e_db = None
+        return e_db
+
     def get_kNN(chunks, e_db, k = 2):
         """
         Input: chunks - tensor containing initial data
@@ -14,8 +42,8 @@ class ToolBox:
         Output: tensor containing the k-nearest-neighbours of input tensor
         """
         neighbours = torch.tensor([])
-        for chunk in chunks:
-            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x[0])).item(), axis=1)
+        for i, chunk in enumerate(chunks):
+            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x[0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(), axis=1)
             kNN = torch.tensor([e_db.nsmallest(k, ['L2'])[0].tolist()])
             neighbours = torch.cat([neighbours, kNN])
         return neighbours
