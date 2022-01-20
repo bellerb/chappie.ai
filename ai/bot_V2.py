@@ -263,6 +263,7 @@ class Agent:
             total_loss = {
                 'hidden loss':0.,
                 'backbone loss':0.,
+                'Cca loss':0.,
                 'value loss':0.,
                 'policy loss':0.,
                 'state loss':0,
@@ -284,6 +285,7 @@ class Agent:
                         )[:self.m_weights['cca']['model'].l - 1]
                         neighbours = ToolBox.get_kNN(chunks, self.E_DB)
                         c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                        c = c.reshape(1, c.size(0), c.size(1))
                         d_hold = torch.cat([d_hold, c])
                     d = d_hold
                     del d_hold
@@ -337,6 +339,11 @@ class Agent:
                 d = self.m_weights['backbone']['model'](h, a_targets)
 
                 if self.E_DB is not None:
+                    self.E_DB = ToolBox.build_embedding_db(
+                        self.m_weights['representation']['model'],
+                        self.m_weights['backbone']['model'],
+                        f_name = f'{folder}/logs/game_log.csv'.replace('(temp)','')
+                    )
                     d_hold = torch.tensor([])
                     for i, row in enumerate(d):
                         chunks = row.reshape(
@@ -346,6 +353,7 @@ class Agent:
                         )[:self.m_weights['cca']['model'].l - 1]
                         neighbours = ToolBox.get_kNN(chunks, self.E_DB)
                         c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                        c = c.reshape(1, c.size(0), c.size(1))
                         d_hold = torch.cat([d_hold, c])
                     d = d_hold
                     del d_hold

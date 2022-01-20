@@ -1,7 +1,8 @@
 import torch
 from time import sleep
+import pandas as pd
 from os import listdir
-from os.path import exists
+from os.path import exists, isfile
 from shutil import copyfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
@@ -15,7 +16,7 @@ class ToolBox:
         Description: builds embedding database from tokens
         Output: dataframe containing embeddings
         """
-        if f_name is not None and os.path.isfile(f_name):
+        if f_name is not None and isfile(f_name):
             t_db = pd.read_csv(f_name)
             t_db = t_db[[h for h in t_db if s_header in h]].drop_duplicates()
         else:

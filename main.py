@@ -32,7 +32,7 @@ if __name__ == '__main__':
             break
 
     if task == 0:
-        chess = chess(train = True)
+        chess = chess()
         chess.play_game(
             'TEST',
             0,
@@ -44,7 +44,7 @@ if __name__ == '__main__':
             ]
         )
     elif task == 1:
-        chess = chess(train = True)
+        chess = chess()
         chess.traing_session(
             loops = 1,
             games = 15,

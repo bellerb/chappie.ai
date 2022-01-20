@@ -191,7 +191,7 @@ class chess:
             t_log = pd.DataFrame()
         n_player = player + '(temp)'
         if os.path.exists(n_player) == False:
-            print('CREAT NEW')
+            print('CREATE NEW')
             os.makedirs(n_player) #Create folder
             copyfile(f'{player}/parameters.json', f'{n_player}/parameters.json') #Overwrite active model with new model
             if os.path.exists(f'{n_player}/parameters.json'):
@@ -215,7 +215,7 @@ class chess:
                     pass
                 for g in range(g_count):
                     #PLAY GAME
-                    print(f'STARTING GAMES\n')
+                    print(f'\nSTARTING GAMES\n')
                     state, train_data = self.play_game(
                         'TEST',
                         g,
