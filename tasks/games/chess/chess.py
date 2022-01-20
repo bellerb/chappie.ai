@@ -15,6 +15,7 @@ class Chess:
         self.y = ['8', '7', '6', '5', '4', '3', '2', '1'] #Board y representation
         self.notation = {'p':1, 'n':2, 'b':3, 'r':4, 'q':5, 'k':6} #Map of notation to part number
         self.parts = {1:'Pawn', 2:'Knight', 3:'Bishop', 4:'Rook', 5:'Queen', 6:'King'} #Map of number to part
+        self.c_escape = {} #Possible check escapes
         self.reset(EPD=EPD) #Reset game board and state
 
     """
@@ -256,7 +257,11 @@ class Chess:
             part = self.board[cur_pos[1]][cur_pos[0]]
             if part * self.p_move > 0 and part != 0:
                 p_name = self.parts[int(part) if part > 0 else int(part)*(-1)] #Get name of part
-                if next_pos in getattr(Chess, p_name).movement(self, self.p_move, cur_pos, capture=True):
+                v_moves = getattr(Chess, p_name).movement(self, self.p_move, cur_pos, capture=True)
+                #print(v_moves)
+                if len(self.log) > 0 and '+' in self.log[-1]:
+                    v_moves = [m for m in v_moves if cur_pos in self.c_escape and m in self.c_escape[cur_pos]]
+                if next_pos in v_moves:
                     return True
         return False
 
@@ -272,7 +277,10 @@ class Chess:
                 if part != 0:
                     p_name = self.parts[int(part) if part > 0 else int(part)*(-1)] #Get name of part
                     p_colour = 1 if part > 0 else -1
-                    moves[f'{str(self.x[x]).upper() if p_colour > 0 else str(self.x[x]).lower()}{self.y[y]}'] = getattr(Chess, p_name).movement(self, p_colour, [x, y], capture=capture)
+                    v_moves = getattr(Chess, p_name).movement(self, p_colour, [x, y], capture=capture)
+                    if len(self.log) > 0 and '+' in self.log[-1]:
+                        v_moves = [m for m in v_moves if (x, y) in self.c_escape and m in self.c_escape[(x, y)]]
+                    moves[f'{str(self.x[x]).upper() if p_colour > 0 else str(self.x[x]).lower()}{self.y[y]}'] = v_moves
         return moves
 
     """
@@ -282,6 +290,7 @@ class Chess:
     Output: list representing current state of the game
     """
     def is_checkmate(self, moves):
+        self.c_escape = {}
         k_pos = () #King position
         p_blocks = [] #Possible blocks
         u_moves = {} #User potential moves
@@ -315,9 +324,14 @@ class Chess:
                 i_game.p_move = i_game.p_move * (-1)
                 i_moves = i_game.possible_board_moves(capture=True) #Imaginary moves
                 if True not in [True for k in i_moves if k_pos[0] in i_moves[k]]: #Check if moved king still in check
-                    if len(self.log) > 0 and self.log[-1][-1] is not '+':
-                        self.log[-1] += '+' #Check
-                    return [0, 0, 0]
+                    #if len(self.log) > 0 and self.log[-1][-1] is not '+':
+                        #self.log[-1] += '+' #Check
+                        #print(m,f'{self.x[m[0][0]]}{self.y[m[0][1]]}', f'{self.x[m[1][0]]}{self.y[m[1][1]]}')
+                    if m[0] in self.c_escape:
+                        self.c_escape[m[0]].append(m[1])
+                    else:
+                        self.c_escape[m[0]] = [m[1]]
+                    #return [0, 0, 0]
             for m in k_pos[1]:
                 if m not in p_moves:
                     i_game = deepcopy(self)
@@ -326,10 +340,19 @@ class Chess:
                     i_game.p_move = i_game.p_move * (-1)
                     i_moves = i_game.possible_board_moves(capture=True) #Imaginary moves
                     if True not in [True for k in i_moves if m in i_moves[k]]: #Check if moved king still in check
-                        if len(self.log) > 0 and self.log[-1][-1] is not '+':
-                            self.log[-1] += '+' #Check
-                        return [0, 0, 0]
-            if self.p_move == -1:
+                        #if len(self.log) > 0 and self.log[-1][-1] is not '+':
+                            #self.log[-1] += '+' #Check
+                            #print(m)
+                            #print(k_pos[0],m,f'{self.x[k_pos[0][0]]}{self.y[k_pos[0][1]]}', f'{self.x[m[0]]}{self.y[m[1]]}')
+                        if k_pos[0] in self.c_escape:
+                            self.c_escape[k_pos[0]].append(m)
+                        else:
+                            self.c_escape[k_pos[0]] = [m]
+                        #return [0, 0, 0]
+            if len(self.c_escape) > 0:
+                self.log[-1] += '+' #Check
+                return [0, 0, 0]
+            elif self.p_move == -1:
                 self.log[-1] += '#'
                 return [0, 0, 1] #Black wins
             else:
@@ -834,26 +857,26 @@ if __name__ == '__main__':
         chess_game.display()
         cur = input('What piece do you want to move?\n')
         next = input('Where do you want to move the piece to?\n')
-        valid = False
         if chess_game.move(cur, next) == False:
-            print('Invalid move')
-        else:
-            valid = True
-        #print(chess_game.check_state())
-        state = chess_game.is_end()
-        if sum(state) > 0:
-            print('\n*********************\n      GAME OVER\n*********************\n')
-            chess_game.display()
-            print('Game Log:\n---------\n')
-            print(f'INITIAL POSITION = {chess_game.init_pos}')
-            print(f'MOVES = {chess_game.log}')
-            print('\nGame Result:\n------------\n')
-            if state == [0, 0, 1]:
-                print('BLACK WINS\n')
-            elif state == [1, 0, 0]:
-                print('WHITE WINS\n')
+            if len(chess_game.log) > 0 and '+' in chess_game.log[-1]:
+                print('Invalid move, you are in check')
             else:
-                print('TIE GAME\n')
-            break
-        if valid == True:
+                print('Invalid move')
+        else:
+            state = chess_game.is_end()
+            if sum(state) > 0:
+                print('\n*********************\n      GAME OVER\n*********************\n')
+                chess_game.display()
+                print('Game Log:\n---------\n')
+                print(f'INITIAL POSITION = {chess_game.init_pos}')
+                print(f'MOVES = {chess_game.log}')
+                print('\nGame Result:\n------------\n')
+                if state == [0, 0, 1]:
+                    print('BLACK WINS\n')
+                elif state == [1, 0, 0]:
+                    print('WHITE WINS\n')
+                else:
+                    print('TIE GAME\n')
+                break
+
             chess_game.p_move = chess_game.p_move * (-1)
