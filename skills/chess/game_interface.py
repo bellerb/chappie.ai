@@ -9,7 +9,7 @@ from shutil import copyfile, rmtree, copytree
 from datetime import datetime
 
 #from ai.bot import Agent
-from ai.bot_V2 import Agent
+from ai.bot import Agent
 from tasks.games.chess.chess import Chess
 from skills.chess.game_plumbing import Plumbing
 from tools.toolbox import ToolBox
@@ -315,4 +315,4 @@ class chess:
                             f'{n_player}/weights',
                             f'{player}/weights'
                         ) #Move model data over if none exists
-        rmtree(n_player) #Remove temporary model folder
+        #rmtree(n_player) #Remove temporary model folder

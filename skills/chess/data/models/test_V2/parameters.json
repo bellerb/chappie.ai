@@ -63,7 +63,8 @@
     "state_dropout":0.5,
     "chunked_dropout":0.5,
     "chunked_length":4,
-    "neighbour_amt":2
+    "neighbour_amt":2,
+    "retro":false
   },
   "training": {
     "bsz": 10,

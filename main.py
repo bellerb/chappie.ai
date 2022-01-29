@@ -46,8 +46,8 @@ if __name__ == '__main__':
     elif task == 1:
         chess = chess()
         chess.traing_session(
-            loops = 1,
-            games = 15,
+            loops = 2,
+            games = 30,
             boards = 1,
             best_of = 3,
             #player = 'skills/chess/data/models/test',

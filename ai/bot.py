@@ -13,7 +13,7 @@ from datetime import datetime
 
 from ai.search import MCTS
 from tools.toolbox import ToolBox
-from ai.model import Representation, Backbone, Head
+from ai.model import Representation, Backbone, Head, ChunkedCrossAttention
 
 
 class Agent:
@@ -60,6 +60,18 @@ class Agent:
             self_dropout = p_model['self_dropout']
         ).to(self.Device)
         backbone.eval()
+        Cca = ChunkedCrossAttention(
+            p_model['latent_size'][-1],
+            layer_size = p_model['chunked_inner'],
+            heads = p_model['chunked_heads'],
+            dropout = p_model['chunked_dropout'],
+            n = p_model['latent_size'][0], #Sequence length
+            m = p_model['chunked_length'], #Chunk length
+            k = p_model['neighbour_amt'], #Amount of neighbours
+            r = p_model['latent_size'][0], #Retrieval length
+            d = p_model['latent_size'][-1] #Embedding size
+        ).to(self.Device)
+        Cca.eval()
         self.m_weights = {
             'representation':{
                 'model':representation,
@@ -68,6 +80,10 @@ class Agent:
             'backbone':{
                 'model':backbone,
                 'param':m_param['data']['active-models']['backbone']
+            },
+            'cca':{
+                'model':Cca,
+                'param':m_param['data']['active-models']['cca']
             }
         }
         heads = {
@@ -121,6 +137,7 @@ class Agent:
             self.m_weights['policy']['model'],
             self.m_weights['state']['model'],
             self.m_weights['reward']['model'],
+            Cca = self.m_weights['cca']['model'],
             action_space = m_param['model']['action_space'],
             c2 = m_param['search']['c2'],
             d_a = m_param['search']['d_a'],
@@ -140,6 +157,14 @@ class Agent:
         self.lr = m_param['training']['lr'] #Learning rate
         self.epoch = m_param['training']['epoch'] #Training epochs
         self.workers = m_param['search']['workers'] #Amount of threads in search
+        if p_model['retro'] == True:
+            self.E_DB = ToolBox.build_embedding_db(
+                representation,
+                backbone,
+                f_name = ('/'.join(s for s in param_name.split('/')[:-1]) + '/logs/game_log.csv').replace('(temp)','')
+            )
+        else:
+            self.E_DB = None
 
     def choose_action(self, state, legal_moves = None):
         """
@@ -151,7 +176,18 @@ class Agent:
         #Expand first node of game tree
         with torch.no_grad():
             h_s = self.m_weights['representation']['model'](state)
-            d = self.m_weights['backbone']['model'](h_s, torch.tensor([[0]])) #backbone function
+            d = self.m_weights['backbone']['model'](h_s, torch.zeros(1,1).to(torch.long)) #backbone function
+            if self.E_DB is not None:
+                #Perform chunked cross attention
+                d = torch.squeeze(d)
+                chunks = d.reshape(
+                    self.m_weights['cca']['model'].l,
+                    self.m_weights['cca']['model'].m,
+                    self.m_weights['cca']['model'].d
+                )[:self.m_weights['cca']['model'].l - 1]
+                neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                d = self.m_weights['cca']['model'](d, neighbours) #chunked cross-attention
+                d = d.reshape(1, d.size(0), d.size(1))
         s_hash = self.MCTS.state_hash(d)
         self.MCTS.tree[(s_hash, None)] = self.MCTS.Node()
         self.MCTS.expand_tree(d, s_hash, None, mask = legal_moves, noise = True)
@@ -161,7 +197,7 @@ class Agent:
         for _ in tqdm(range(self.sim_amt),desc='MCTS'):
             self.MCTS.l = 0
             search = ToolBox.multi_thread(
-                [{'name':f'search {x}', 'func':self.MCTS.search, 'args':(d, self.train_control)} for x in range(self.workers)],
+                [{'name':f'search {x}', 'func':self.MCTS.search, 'args':(d, self.train_control, self.E_DB)} for x in range(self.workers)],
                 workers = self.workers
             )
         #Find best move
@@ -196,6 +232,10 @@ class Agent:
             self.m_weights['backbone']['model'].parameters(),
             lr=self.lr
         )
+        cca_optimizer = torch.optim.Adam(
+            self.m_weights['cca']['model'].parameters(),
+            lr=self.lr
+        )
         v_optimizer = torch.optim.Adam(
             self.m_weights['value']['model'].parameters(),
             lr=self.lr
@@ -214,6 +254,7 @@ class Agent:
         )
         self.m_weights['representation']['model'].train() #Turn on the train mode
         self.m_weights['backbone']['model'].train() #Turn on the train mode
+        self.m_weights['cca']['model'].train() #Turn on the train mode
         self.m_weights['value']['model'].train() #Turn on the train mode
         self.m_weights['policy']['model'].train() #Turn on the train mode
         self.m_weights['state']['model'].train() #Turn on the train mode
@@ -226,6 +267,7 @@ class Agent:
             total_loss = {
                 'hidden loss':0.,
                 'backbone loss':0.,
+                'Cca loss':0.,
                 'value loss':0.,
                 'policy loss':0.,
                 'state loss':0,
@@ -236,6 +278,22 @@ class Agent:
 
                 h = self.m_weights['representation']['model'](state)
                 d = self.m_weights['backbone']['model'](h, a_targets)
+
+                if self.E_DB is not None:
+                    d_hold = torch.tensor([])
+                    for i, row in enumerate(d):
+                        chunks = row.reshape(
+                            self.m_weights['cca']['model'].l,
+                            self.m_weights['cca']['model'].m,
+                            self.m_weights['cca']['model'].d
+                        )[:self.m_weights['cca']['model'].l - 1]
+                        neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                        c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                        c = c.reshape(1, c.size(0), c.size(1))
+                        d_hold = torch.cat([d_hold, c])
+                    d = d_hold
+                    del d_hold
+
                 v = self.m_weights['value']['model'](d)
                 p = self.m_weights['policy']['model'](d)
                 s = self.m_weights['state']['model'](d)
@@ -252,6 +310,7 @@ class Agent:
                 s_loss = mse(s, s_h) #Apply loss function to results
                 h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
                 d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+                cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
 
                 h_optimizer.zero_grad()
                 total_loss['hidden loss'] += h_loss.item()
@@ -271,8 +330,38 @@ class Agent:
                 torch.nn.utils.clip_grad_norm_(self.m_weights['backbone']['model'].parameters(), 0.5)
                 g_optimizer.step()
 
+                total_loss['Cca loss'] += cca_loss.item()
+                cca_optimizer.zero_grad()
+                cca_loss.backward(
+                    retain_graph = True,
+                    inputs = list(self.m_weights['cca']['model'].parameters())
+                ) #Backpropegate through model
+                torch.nn.utils.clip_grad_norm_(self.m_weights['cca']['model'].parameters(), 0.5)
+                cca_optimizer.step()
+
                 h = self.m_weights['representation']['model'](state)
                 d = self.m_weights['backbone']['model'](h, a_targets)
+
+                if self.E_DB is not None:
+                    self.E_DB = ToolBox.build_embedding_db(
+                        self.m_weights['representation']['model'],
+                        self.m_weights['backbone']['model'],
+                        f_name = f'{folder}/logs/game_log.csv'.replace('(temp)','')
+                    )
+                    d_hold = torch.tensor([])
+                    for i, row in enumerate(d):
+                        chunks = row.reshape(
+                            self.m_weights['cca']['model'].l,
+                            self.m_weights['cca']['model'].m,
+                            self.m_weights['cca']['model'].d
+                        )[:self.m_weights['cca']['model'].l - 1]
+                        neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                        c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                        c = c.reshape(1, c.size(0), c.size(1))
+                        d_hold = torch.cat([d_hold, c])
+                    d = d_hold
+                    del d_hold
+
                 v = self.m_weights['value']['model'](d)
                 p = self.m_weights['policy']['model'](d)
                 s = self.m_weights['state']['model'](d)
