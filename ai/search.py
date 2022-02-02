@@ -152,7 +152,7 @@ class MCTS:
         sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
         if self.tree[(s_hash, a_hash)].N == 0:
             #EXPANSION ---
-            self.expand_tree(s, s_hash, a_hash, sk_hash)
+            self.expand_tree(s, s_hash, a_hash, sk_hash, noise = False)
         elif self.l < self.max_depth:
             a_k = torch.tensor(self.pUCT(sk_hash)) #Find best action to perform @ [sk]
             a_k = a_k.reshape((1,1))

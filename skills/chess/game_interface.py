@@ -279,13 +279,7 @@ class chess:
                         a_players.reverse()
                     #LOG TRAINING DATA
                     train_data['reward'] = [0.] * len(train_data)
-                    m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player))
-                    m_log['model'] = player
-                    t_log = t_log.append(m_log, ignore_index=True)
-                    del m_log
-                    if os.path.exists(f'{player}/logs') == False:
-                        os.makedirs(f'{player}/logs') #Create folder
-                    t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
+
                     if os.path.exists(f'{player}/logs/game_log.csv'):
                         g_log = pd.read_csv(f'{player}/logs/game_log.csv')
                     else:
@@ -305,6 +299,38 @@ class chess:
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
+                    s_headers = [h for h in g_log if 'state' in h]
+                    m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                    del s_headers
+
+                    #m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player))
+                    m_log['model'] = player
+                    t_log = t_log.append(m_log, ignore_index=True)
+                    del m_log
+                    if os.path.exists(f'{player}/logs') == False:
+                        os.makedirs(f'{player}/logs') #Create folder
+                    t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
+                    '''
+                    if os.path.exists(f'{player}/logs/game_log.csv'):
+                        g_log = pd.read_csv(f'{player}/logs/game_log.csv')
+                    else:
+                        g_log = pd.DataFrame()
+                    if t == 0:
+                        train_data['ELO'] = [''] * len(train_data)
+                    else:
+                        cur_ELO = g_log['ELO'].dropna().iloc[-1] if 'ELO' in g_log and len(g_log['ELO'].dropna()) > 0 else 0
+                        ELO = ToolBox.update_ELO(
+                            cur_ELO, #ELO_p1,
+                            cur_ELO,  #ELO_p2
+                            tie = True if state == [0, 0, 0] else False
+                        )
+                        train_data['ELO'] = [ELO[b_elo]] * len(train_data)
+                        print(cur_ELO, ELO, b_elo)
+                    train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
+                    train_data['Date'] = [datetime.now()] * len(train_data)
+                    g_log = g_log.append(train_data, ignore_index=True)
+                    g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
+                    '''
                     #GARBEGE CLEAN UP
                     del g_log
                     train_data = pd.DataFrame()

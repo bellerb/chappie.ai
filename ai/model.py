@@ -5,6 +5,33 @@ from torch import nn
 
 from einops import rearrange, repeat, reduce
 
+class FFN(nn.Module):
+    def __init__(
+        self,
+        input_size,
+        layer_size = 64,
+        heads = 1,
+        dropout = 0.5,
+        bias = False,
+        n_dim = -1
+    ):
+        super(FFN, self).__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(
+                input_size,
+                layer_size,
+                bias = bias
+            ),
+            nn.Dropout(dropout)
+        )
+        self.GELU = torch.nn.GELU()
+
+    def forward(self, x):
+        z = self.linear(x)
+        z = nn.functional.normalize(z, dim=n_dim)
+        z = self.GELU(z)
+        return z
+
 class Attention(nn.Module):
     """
     Multi-head attention model
@@ -86,8 +113,6 @@ class Attention(nn.Module):
                 (self.K(context), self.V(context))
             )
         #b:batches, y:y-axis, q:q x-axis, k: k x-axis
-        #print('q',q.size())
-        #print('k',k.size())
         z = torch.einsum('b q y, b k y -> b k q', q, k) / (x.size(-1) ** (0.5)) #Scaled dot-product [QK.T/sqrt(dk)]
 
         if mask is not None:
@@ -176,9 +201,84 @@ class ChunkedCrossAttention(nn.Module):
         chunked_output[- 1] = chunks
         return chunked_output
 
+class SparseGate(nn.Module):
+    def __init__(
+        self,
+        input_size,
+        expert_count,
+        hidden_layers=64,
+        k = 2,
+        dropout = 0.5
+    ):
+        super(SparseGate, self).__init__()
+        self.input = nn.Sequential(
+            nn.Linear(
+                input_size[-1],
+                hidden_layers,
+                bias = False
+            ),
+            nn.Dropout(dropout)
+        )
+        self.linear = nn.Sequential(
+            nn.Linear(
+                hidden_layers,
+                expert_count,
+                bias = False
+            ),
+            nn.Dropout(dropout)
+        )
+        self.output = nn.Sequential(
+            nn.Linear(
+                input_size[0],
+                1,
+                bias = False
+            ),
+            nn.Dropout(dropout)
+        )
+        self.softmax = torch.nn.Softmax(dim = -1)
+        self.k = k
+
+    def forward(self, x):
+        x = self.input(x)
+        x = self.linear(x)
+        x = self.output(x.T)
+        x = rearrange(x, 'y x -> (y x)')
+        topk, indices = torch.topk(x, self.k, dim = -1)
+        topk = self.softmax(topk)
+        return [(i, t) for i, t in zip(indices, topk)]
+
+class MoE(nn.Module):
+    def __init__(
+        self,
+        input_size,
+        expert_count,
+        hidden_layers=64,
+        k = 2,
+        dropout = 0.5
+    ):
+        super(MoE, self).__init__()
+        self.gate = SparseGate(
+            input_size,
+            expert_count,
+            k = k,
+            hidden_layers = hidden_layers,
+            dropout = dropout
+        )
+        self.experts = [MLP(input_size[-1]) for _ in range(expert_count)]
+
+    def forward(self, x):
+        gate = self.gate(x)
+        y = torch.tensor([])
+        for i, g in gate:
+            e = g * self.experts[i](x)
+            e = rearrange(e, '(k m) d -> k m d', k=1)
+            y = torch.cat([y, e])
+        y = reduce(y, 'k m d -> m d', 'sum')
+        return y
+
 class DecoderOnlyTransformer(nn.Module):
     """
-    Decoder only transformer model
+    Mixture of Experts Decoder only transformer model
     """
     def __init__(
         self,
@@ -269,6 +369,21 @@ class Perceiver(nn.Module):
             self_heads,
             self_dropout
         )
+
+    def forward(self, x, latent):
+        """
+        Input: x - tensor containing input data
+               latent - tensor containing latent input data
+        Description: Forward pass of perceiver model
+        Output: tensor containing output of model
+        """
+        z = self.cross_attention(latent, context = x)
+        for _ in range(self.recursions):
+            for _ in range(self.transformer_blocks):
+                z = self.latent_transformer(z)
+            z = self.cross_attention(z, context = x)
+        z = self.latent_transformer(z)
+        return z
 
     def forward(self, x, latent):
         """

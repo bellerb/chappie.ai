@@ -150,8 +150,10 @@ class Agent:
         if self.train_control is True:
             #self.T = m_param['search']['T'] #Tempature
             self.T = 1
+            self.noise = True
         else:
             self.T = 1
+            self.noise = False
         self.sim_amt = m_param['search']['sim_amt']
         self.bsz = m_param['training']['bsz'] #Batch size
         self.lr = m_param['training']['lr'] #Learning rate
@@ -190,7 +192,7 @@ class Agent:
                 d = d.reshape(1, d.size(0), d.size(1))
         s_hash = self.MCTS.state_hash(d)
         self.MCTS.tree[(s_hash, None)] = self.MCTS.Node()
-        self.MCTS.expand_tree(d, s_hash, None, mask = legal_moves, noise = True)
+        self.MCTS.expand_tree(d, s_hash, None, mask = legal_moves, noise = self.noise)
         self.MCTS.tree[(s_hash, None)].R = self.m_weights['reward']['model'](d).reshape(1).item()
         self.MCTS.tree[(s_hash, None)].N += 1
         #Run simulations
@@ -210,8 +212,8 @@ class Agent:
             probs = [0] * len(counts)
             probs[a] = 1
         else:
-            c_s = sum(c ** (1./self.T) for c in counts.values())
-            probs = [(x ** (1./self.T)) / c_s for x in counts.values()]
+            c_s = sum(c ** (1. / self.T) for c in counts.values())
+            probs = [(x ** (1. / self.T)) / c_s for x in counts.values()]
         self.MCTS.tree = {}
         return (probs, value, reward)
 
@@ -228,30 +230,38 @@ class Agent:
             self.m_weights['representation']['model'].parameters(),
             lr=self.lr
         )
+        h_scheduler = torch.optim.lr_scheduler.StepLR(h_optimizer, 1.0, gamma=0.95)
         g_optimizer = torch.optim.Adam(
             self.m_weights['backbone']['model'].parameters(),
             lr=self.lr
         )
-        cca_optimizer = torch.optim.Adam(
-            self.m_weights['cca']['model'].parameters(),
-            lr=self.lr
-        )
+        g_scheduler = torch.optim.lr_scheduler.StepLR(g_optimizer, 1.0, gamma=0.95)
+        if self.E_DB is not None:
+            cca_optimizer = torch.optim.Adam(
+                self.m_weights['cca']['model'].parameters(),
+                lr=self.lr
+            )
+            cca_scheduler = torch.optim.lr_scheduler.StepLR(cca_optimizer, 1.0, gamma=0.95)
         v_optimizer = torch.optim.Adam(
             self.m_weights['value']['model'].parameters(),
             lr=self.lr
         )
+        v_scheduler = torch.optim.lr_scheduler.StepLR(v_optimizer, 1.0, gamma=0.95)
         p_optimizer = torch.optim.Adam(
             self.m_weights['policy']['model'].parameters(),
             lr=self.lr
         )
+        p_scheduler = torch.optim.lr_scheduler.StepLR(p_optimizer, 1.0, gamma=0.95)
         s_optimizer = torch.optim.Adam(
             self.m_weights['state']['model'].parameters(),
             lr=self.lr
         )
+        s_scheduler = torch.optim.lr_scheduler.StepLR(s_optimizer, 1.0, gamma=0.95)
         r_optimizer = torch.optim.Adam(
             self.m_weights['reward']['model'].parameters(),
             lr=self.lr
         )
+        r_scheduler = torch.optim.lr_scheduler.StepLR(r_optimizer, 1.0, gamma=0.95)
         self.m_weights['representation']['model'].train() #Turn on the train mode
         self.m_weights['backbone']['model'].train() #Turn on the train mode
         self.m_weights['cca']['model'].train() #Turn on the train mode
@@ -273,81 +283,91 @@ class Agent:
                 'state loss':0,
                 'reward loss':0.
             }
+            if self.E_DB is None:
+                del total_loss['Cca loss'] #Remove Cca loss if layer not active
+            if epoch == 1:
+                data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
             for batch, i in enumerate(range(0, len(data), self.bsz)):
                 state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.bsz) #Get batch data with the selected targets being masked
 
+                if epoch == 0:
+                    h = self.m_weights['representation']['model'](state)
+                    d = self.m_weights['backbone']['model'](h, a_targets)
+
+                    if self.E_DB is not None:
+                        d_hold = torch.tensor([])
+                        for i, row in enumerate(d):
+                            chunks = row.reshape(
+                                self.m_weights['cca']['model'].l,
+                                self.m_weights['cca']['model'].m,
+                                self.m_weights['cca']['model'].d
+                            )[:self.m_weights['cca']['model'].l - 1]
+                            neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                            c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                            c = c.reshape(1, c.size(0), c.size(1))
+                            d_hold = torch.cat([d_hold, c])
+                        d = d_hold
+                        del d_hold
+
+                    v = self.m_weights['value']['model'](d)
+                    p = self.m_weights['policy']['model'](d)
+                    s = self.m_weights['state']['model'](d)
+                    r = self.m_weights['reward']['model'](d)
+                    s_h = self.m_weights['representation']['model'](s_targets)
+
+                    v = rearrange(v, 'b y x -> b (y x)')
+                    p = rearrange(p, 'b y x -> b (y x)')
+                    r = rearrange(r, 'b y x -> b (y x)')
+
+                    v_loss = mse(v, v_targets) #Apply loss function to results
+                    p_loss = bce(p, p_targets) #Apply loss function to results
+                    r_loss = mse(r, r_targets) #Apply loss function to results
+                    s_loss = mse(s, s_h) #Apply loss function to results
+                    h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
+                    d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+                    cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+
+                    h_optimizer.zero_grad()
+                    total_loss['hidden loss'] += h_loss.item()
+                    h_loss.backward(
+                        retain_graph = True,
+                        inputs = list(self.m_weights['representation']['model'].parameters())
+                    ) #Backpropegate through model
+                    torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
+                    h_optimizer.step()
+                    h_scheduler.step()
+
+                    total_loss['backbone loss'] += d_loss.item()
+                    g_optimizer.zero_grad()
+                    d_loss.backward(
+                        retain_graph = True,
+                        inputs = list(self.m_weights['backbone']['model'].parameters())
+                    ) #Backpropegate through model
+                    torch.nn.utils.clip_grad_norm_(self.m_weights['backbone']['model'].parameters(), 0.5)
+                    g_optimizer.step()
+                    g_scheduler.step()
+
+                    if self.E_DB is not None:
+                        total_loss['Cca loss'] += cca_loss.item()
+                        cca_optimizer.zero_grad()
+                        cca_loss.backward(
+                            retain_graph = True,
+                            inputs = list(self.m_weights['cca']['model'].parameters())
+                        ) #Backpropegate through model
+                        torch.nn.utils.clip_grad_norm_(self.m_weights['cca']['model'].parameters(), 0.5)
+                        cca_optimizer.step()
+                        cca_scheduler.step()
+
                 h = self.m_weights['representation']['model'](state)
                 d = self.m_weights['backbone']['model'](h, a_targets)
 
                 if self.E_DB is not None:
-                    d_hold = torch.tensor([])
-                    for i, row in enumerate(d):
-                        chunks = row.reshape(
-                            self.m_weights['cca']['model'].l,
-                            self.m_weights['cca']['model'].m,
-                            self.m_weights['cca']['model'].d
-                        )[:self.m_weights['cca']['model'].l - 1]
-                        neighbours = ToolBox.get_kNN(chunks, self.E_DB)
-                        c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
-                        c = c.reshape(1, c.size(0), c.size(1))
-                        d_hold = torch.cat([d_hold, c])
-                    d = d_hold
-                    del d_hold
-
-                v = self.m_weights['value']['model'](d)
-                p = self.m_weights['policy']['model'](d)
-                s = self.m_weights['state']['model'](d)
-                r = self.m_weights['reward']['model'](d)
-                s_h = self.m_weights['representation']['model'](s_targets)
-
-                v = rearrange(v, 'b y x -> b (y x)')
-                p = rearrange(p, 'b y x -> b (y x)')
-                r = rearrange(r, 'b y x -> b (y x)')
-
-                v_loss = mse(v, v_targets) #Apply loss function to results
-                p_loss = bce(p, p_targets) #Apply loss function to results
-                r_loss = mse(r, r_targets) #Apply loss function to results
-                s_loss = mse(s, s_h) #Apply loss function to results
-                h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
-                d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
-                cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
-
-                h_optimizer.zero_grad()
-                total_loss['hidden loss'] += h_loss.item()
-                h_loss.backward(
-                    retain_graph = True,
-                    inputs = list(self.m_weights['representation']['model'].parameters())
-                ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
-                h_optimizer.step()
-
-                total_loss['backbone loss'] += d_loss.item()
-                g_optimizer.zero_grad()
-                d_loss.backward(
-                    retain_graph = True,
-                    inputs = list(self.m_weights['backbone']['model'].parameters())
-                ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['backbone']['model'].parameters(), 0.5)
-                g_optimizer.step()
-
-                total_loss['Cca loss'] += cca_loss.item()
-                cca_optimizer.zero_grad()
-                cca_loss.backward(
-                    retain_graph = True,
-                    inputs = list(self.m_weights['cca']['model'].parameters())
-                ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['cca']['model'].parameters(), 0.5)
-                cca_optimizer.step()
-
-                h = self.m_weights['representation']['model'](state)
-                d = self.m_weights['backbone']['model'](h, a_targets)
-
-                if self.E_DB is not None:
-                    self.E_DB = ToolBox.build_embedding_db(
-                        self.m_weights['representation']['model'],
-                        self.m_weights['backbone']['model'],
-                        f_name = f'{folder}/logs/game_log.csv'.replace('(temp)','')
-                    )
+                    if epoch == 0:
+                        self.E_DB = ToolBox.build_embedding_db(
+                            self.m_weights['representation']['model'],
+                            self.m_weights['backbone']['model'],
+                            f_name = f'{folder}/logs/game_log.csv'.replace('(temp)','')
+                        )
                     d_hold = torch.tensor([])
                     for i, row in enumerate(d):
                         chunks = row.reshape(
@@ -384,6 +404,7 @@ class Agent:
                 ) #Backpropegate through model
                 torch.nn.utils.clip_grad_norm_(self.m_weights['value']['model'].parameters(), 0.5)
                 v_optimizer.step()
+                v_scheduler.step()
 
                 total_loss['policy loss'] += p_loss.item()
                 p_optimizer.zero_grad()
@@ -392,6 +413,7 @@ class Agent:
                 ) #Backpropegate through model
                 torch.nn.utils.clip_grad_norm_(self.m_weights['policy']['model'].parameters(), 0.5)
                 p_optimizer.step()
+                p_scheduler.step()
 
                 total_loss['state loss'] += s_loss.item()
                 s_optimizer.zero_grad()
@@ -400,6 +422,7 @@ class Agent:
                 ) #Backpropegate through model
                 torch.nn.utils.clip_grad_norm_(self.m_weights['state']['model'].parameters(), 0.5)
                 s_optimizer.step()
+                s_scheduler.step()
 
                 total_loss['reward loss'] += r_loss.item()
                 r_optimizer.zero_grad()
@@ -408,6 +431,7 @@ class Agent:
                 ) #Backpropegate through model
                 torch.nn.utils.clip_grad_norm_(self.m_weights['reward']['model'].parameters(), 0.5)
                 r_optimizer.step()
+                r_scheduler.step()
 
                 t_steps += 1
             print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}\n')
