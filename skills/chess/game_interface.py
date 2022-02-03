@@ -299,11 +299,12 @@ class chess:
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
-                    s_headers = [h for h in g_log if 'state' in h]
-                    m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
-                    del s_headers
-
-                    #m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player))
+                    if g == g_count - 1:
+                        s_headers = [h for h in g_log if 'state' in h]
+                        m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                        del s_headers
+                    else:
+                        m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player, encoder=False))
                     m_log['model'] = player
                     t_log = t_log.append(m_log, ignore_index=True)
                     del m_log

@@ -217,7 +217,7 @@ class Agent:
         self.MCTS.tree = {}
         return (probs, value, reward)
 
-    def train(self, data, folder = None):
+    def train(self, data, folder = None, encoder = True):
         """
         Input: data - dataframe containing training data
         Description: Training of the models
@@ -285,12 +285,15 @@ class Agent:
             }
             if self.E_DB is None:
                 del total_loss['Cca loss'] #Remove Cca loss if layer not active
+            if encoder == False or epoch > 0:
+                del total_loss['hidden loss'] #Remove hidden loss if layer not active
+                del total_loss['backbone loss'] #Remove backbone loss if layer not active
             if epoch == 1:
                 data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
             for batch, i in enumerate(range(0, len(data), self.bsz)):
                 state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.bsz) #Get batch data with the selected targets being masked
 
-                if epoch == 0:
+                if epoch == 0 and encoder == True:
                     h = self.m_weights['representation']['model'](state)
                     d = self.m_weights['backbone']['model'](h, a_targets)
 
@@ -362,7 +365,7 @@ class Agent:
                 d = self.m_weights['backbone']['model'](h, a_targets)
 
                 if self.E_DB is not None:
-                    if epoch == 0:
+                    if epoch == 0 and encoder == True:
                         self.E_DB = ToolBox.build_embedding_db(
                             self.m_weights['representation']['model'],
                             self.m_weights['backbone']['model'],

@@ -10,10 +10,11 @@ class FFN(nn.Module):
         self,
         input_size,
         layer_size = 64,
-        heads = 1,
         dropout = 0.5,
         bias = False,
-        n_dim = -1
+        n_dim = -1,
+        activation = True,
+        normalize = True
     ):
         super(FFN, self).__init__()
         self.linear = nn.Sequential(
@@ -24,12 +25,19 @@ class FFN(nn.Module):
             ),
             nn.Dropout(dropout)
         )
-        self.GELU = torch.nn.GELU()
+        if activation == True:
+            self.GELU = torch.nn.GELU()
+            self.activation = True
+        else:
+            self.activation = False
+        self.normalize = True if normalize == True else False
 
     def forward(self, x):
         z = self.linear(x)
-        z = nn.functional.normalize(z, dim=n_dim)
-        z = self.GELU(z)
+        if self.normalize == True:
+            z = nn.functional.normalize(z, dim=n_dim)
+        if self.activation == True:
+            z = self.GELU(z)
         return z
 
 class Attention(nn.Module):
@@ -264,7 +272,7 @@ class MoE(nn.Module):
             hidden_layers = hidden_layers,
             dropout = dropout
         )
-        self.experts = [MLP(input_size[-1]) for _ in range(expert_count)]
+        self.experts = nn.ModuleList(MLP(input_size[-1]) for _ in range(expert_count))
 
     def forward(self, x):
         gate = self.gate(x)
@@ -285,7 +293,8 @@ class DecoderOnlyTransformer(nn.Module):
         input_size,
         layer_size = 64,
         heads = 1,
-        dropout = 0.5
+        dropout = 0.5,
+        moe = False
     ):
         """
         Input: input_size - integer representing the size of the input data
@@ -302,6 +311,23 @@ class DecoderOnlyTransformer(nn.Module):
             heads = heads,
             dropout = dropout
         )
+        if moe == False:
+            self.linear = self.FNN(
+                input_size,
+                layer_size = input_size,
+                dropout = dropout,
+                bias = False,
+                n_dim = -1
+            )
+        else:
+            self.linear = self.MoE(
+                input_size,
+                expert_count,
+                hidden_layers=64,
+                k = 2,
+                dropout = 0.5
+            )
+        '''
         self.linear = nn.Sequential(
             nn.Linear(
                 input_size,
@@ -311,6 +337,7 @@ class DecoderOnlyTransformer(nn.Module):
             nn.Dropout(dropout)
         )
         self.GELU = torch.nn.GELU()
+        '''
 
     def forward(self, x):
         """
@@ -321,8 +348,8 @@ class DecoderOnlyTransformer(nn.Module):
         z = self.self_attention(x)
         z = nn.functional.normalize(z, dim = -1)
         z = self.linear(z)
-        z = nn.functional.normalize(z, dim = -1)
-        z = self.GELU(z)
+        #z = nn.functional.normalize(z, dim = -1)
+        #z = self.GELU(z)
         return z
 
 class Perceiver(nn.Module):
