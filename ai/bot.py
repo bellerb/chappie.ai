@@ -148,12 +148,12 @@ class Agent:
         )
         self.train_control = train
         if self.train_control is True:
-            #self.T = m_param['search']['T'] #Tempature
-            self.T = 1
             self.noise = True
         else:
-            self.T = 1
             self.noise = False
+        #Decay tempature with as more training games played to cause pUCT formula to become more exploitative
+        #self.T = m_param['search']['T'] 
+        self.T = 1 #Decay tempature
         self.sim_amt = m_param['search']['sim_amt'] #Amount of simulations to run
         self.workers = m_param['search']['workers'] #Amount of threads in search
         self.training_settings =  m_param['training'] #Training settings
