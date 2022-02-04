@@ -298,6 +298,8 @@ class chess:
                     train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
+                    if os.path.exists(f'{player}/logs') == False:
+                        os.makedirs(f'{player}/logs') #Create folder
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
                     if g == g_count - 1:
                         s_headers = [h for h in g_log if 'state' in h]
@@ -308,10 +310,12 @@ class chess:
                     m_log['model'] = player
                     t_log = t_log.append(m_log, ignore_index=True)
                     del m_log
+                    t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
+                    
+                    '''
                     if os.path.exists(f'{player}/logs') == False:
                         os.makedirs(f'{player}/logs') #Create folder
                     t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
-                    '''
                     if os.path.exists(f'{player}/logs/game_log.csv'):
                         g_log = pd.read_csv(f'{player}/logs/game_log.csv')
                     else:
@@ -332,6 +336,7 @@ class chess:
                     g_log = g_log.append(train_data, ignore_index=True)
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
                     '''
+
                     #GARBEGE CLEAN UP
                     del g_log
                     train_data = pd.DataFrame()

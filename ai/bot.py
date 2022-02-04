@@ -154,11 +154,10 @@ class Agent:
         else:
             self.T = 1
             self.noise = False
-        self.sim_amt = m_param['search']['sim_amt']
-        self.bsz = m_param['training']['bsz'] #Batch size
-        self.lr = m_param['training']['lr'] #Learning rate
-        self.epoch = m_param['training']['epoch'] #Training epochs
+        self.sim_amt = m_param['search']['sim_amt'] #Amount of simulations to run
         self.workers = m_param['search']['workers'] #Amount of threads in search
+        self.training_settings =  m_param['training'] #Training settings
+
         if p_model['retro'] == True:
             self.E_DB = ToolBox.build_embedding_db(
                 representation,
@@ -223,57 +222,94 @@ class Agent:
         Description: Training of the models
         Output: dataframe containing the training log
         """
-        #Initailize training
+        #Training loss functions
         mse = torch.nn.MSELoss() #Mean squared error loss
         bce = torch.nn.BCELoss() #Binary cross entropy loss
+        #Hidden layer settings
         h_optimizer = torch.optim.Adam(
             self.m_weights['representation']['model'].parameters(),
-            lr=self.lr
+            lr=self.training_settings['lr']
         )
-        h_scheduler = torch.optim.lr_scheduler.StepLR(h_optimizer, 1.0, gamma=0.95)
+        h_scheduler = torch.optim.lr_scheduler.StepLR(
+            h_optimizer,
+            self.training_settings['h_step'],
+            gamma=self.training_settings['h_gamma']
+        )
+        #Backbone layer settings
         g_optimizer = torch.optim.Adam(
             self.m_weights['backbone']['model'].parameters(),
-            lr=self.lr
+            lr=self.training_settings['lr']
         )
-        g_scheduler = torch.optim.lr_scheduler.StepLR(g_optimizer, 1.0, gamma=0.95)
+        g_scheduler = torch.optim.lr_scheduler.StepLR(
+            g_optimizer,
+            self.training_settings['b_step'],
+            gamma=self.training_settings['b_gamma']
+        )
+        #Chunked cross-attention layer settings
         if self.E_DB is not None:
             cca_optimizer = torch.optim.Adam(
                 self.m_weights['cca']['model'].parameters(),
-                lr=self.lr
+                lr=self.training_settings['lr']
             )
-            cca_scheduler = torch.optim.lr_scheduler.StepLR(cca_optimizer, 1.0, gamma=0.95)
+            cca_scheduler = torch.optim.lr_scheduler.StepLR(
+                cca_optimizer,
+                self.training_settings['cca_step'],
+                gamma=self.training_settings['cca_gamma']
+            )
+        #Value head settings
         v_optimizer = torch.optim.Adam(
             self.m_weights['value']['model'].parameters(),
-            lr=self.lr
+            lr=self.training_settings['lr']
         )
-        v_scheduler = torch.optim.lr_scheduler.StepLR(v_optimizer, 1.0, gamma=0.95)
+        v_scheduler = torch.optim.lr_scheduler.StepLR(
+            v_optimizer,
+            self.training_settings['v_step'],
+            gamma=self.training_settings['v_gamma']
+        )
+        #Policy head settings
         p_optimizer = torch.optim.Adam(
             self.m_weights['policy']['model'].parameters(),
-            lr=self.lr
+            lr=self.training_settings['lr']
         )
-        p_scheduler = torch.optim.lr_scheduler.StepLR(p_optimizer, 1.0, gamma=0.95)
+        p_scheduler = torch.optim.lr_scheduler.StepLR(
+            p_optimizer,
+            self.training_settings['p_step'],
+            gamma=self.training_settings['p_gamma']
+        )
+        #Next state representation head settings
         s_optimizer = torch.optim.Adam(
             self.m_weights['state']['model'].parameters(),
-            lr=self.lr
+            lr=self.training_settings['lr']
         )
-        s_scheduler = torch.optim.lr_scheduler.StepLR(s_optimizer, 1.0, gamma=0.95)
+        s_scheduler = torch.optim.lr_scheduler.StepLR(
+            s_optimizer,
+            self.training_settings['s_step'],
+            gamma=self.training_settings['s_gamma']
+        )
+        #Reward settings
         r_optimizer = torch.optim.Adam(
             self.m_weights['reward']['model'].parameters(),
-            lr=self.lr
+            lr=self.training_settings['lr']
         )
-        r_scheduler = torch.optim.lr_scheduler.StepLR(r_optimizer, 1.0, gamma=0.95)
+        r_scheduler = torch.optim.lr_scheduler.StepLR(
+            r_optimizer,
+            self.training_settings['r_step'],
+            gamma=self.training_settings['r_gamma']
+        )
+        #Load model weights
         self.m_weights['representation']['model'].train() #Turn on the train mode
         self.m_weights['backbone']['model'].train() #Turn on the train mode
-        self.m_weights['cca']['model'].train() #Turn on the train mode
+        if self.E_DB is not None:
+            self.m_weights['cca']['model'].train() #Turn on the train mode
         self.m_weights['value']['model'].train() #Turn on the train mode
         self.m_weights['policy']['model'].train() #Turn on the train mode
         self.m_weights['state']['model'].train() #Turn on the train mode
         self.m_weights['reward']['model'].train() #Turn on the train mode
-        t_log = []
         #Start training model
+        t_log = [] #Training log
         start_time = time.time() #Get time of starting process
-        for epoch in range(self.epoch):
-            t_steps = 0
+        for epoch in range(self.training_settings['epoch']):
+            t_steps = 0 #Current training step
             total_loss = {
                 'hidden loss':0.,
                 'backbone loss':0.,
@@ -290,9 +326,8 @@ class Agent:
                 del total_loss['backbone loss'] #Remove backbone loss if layer not active
             if epoch == 1:
                 data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
-            for batch, i in enumerate(range(0, len(data), self.bsz)):
-                state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.bsz) #Get batch data with the selected targets being masked
-
+            for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
+                state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
                 if epoch == 0 and encoder == True:
                     h = self.m_weights['representation']['model'](state)
                     d = self.m_weights['backbone']['model'](h, a_targets)
@@ -329,41 +364,49 @@ class Agent:
                     h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
                     d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
                     cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
-
+                    #Update hidden layer weights
                     h_optimizer.zero_grad()
                     total_loss['hidden loss'] += h_loss.item()
                     h_loss.backward(
                         retain_graph = True,
                         inputs = list(self.m_weights['representation']['model'].parameters())
-                    ) #Backpropegate through model
-                    torch.nn.utils.clip_grad_norm_(self.m_weights['representation']['model'].parameters(), 0.5)
+                    )
+                    torch.nn.utils.clip_grad_norm_(
+                        self.m_weights['representation']['model'].parameters(),
+                        self.training_settings['h_max_norm']
+                    )
                     h_optimizer.step()
                     h_scheduler.step()
-
+                    #Update backbone layer weights
                     total_loss['backbone loss'] += d_loss.item()
                     g_optimizer.zero_grad()
                     d_loss.backward(
                         retain_graph = True,
                         inputs = list(self.m_weights['backbone']['model'].parameters())
-                    ) #Backpropegate through model
-                    torch.nn.utils.clip_grad_norm_(self.m_weights['backbone']['model'].parameters(), 0.5)
+                    )
+                    torch.nn.utils.clip_grad_norm_(
+                        self.m_weights['backbone']['model'].parameters(),
+                        self.training_settings['b_max_norm']
+                    )
                     g_optimizer.step()
                     g_scheduler.step()
-
+                    #Update chunked cross-attention layer weights
                     if self.E_DB is not None:
                         total_loss['Cca loss'] += cca_loss.item()
                         cca_optimizer.zero_grad()
                         cca_loss.backward(
                             retain_graph = True,
                             inputs = list(self.m_weights['cca']['model'].parameters())
-                        ) #Backpropegate through model
-                        torch.nn.utils.clip_grad_norm_(self.m_weights['cca']['model'].parameters(), 0.5)
+                        )
+                        torch.nn.utils.clip_grad_norm_(
+                            self.m_weights['cca']['model'].parameters(),
+                            self.training_settings['cca_max_norm']
+                        )
                         cca_optimizer.step()
                         cca_scheduler.step()
-
+                #Calculate loss values
                 h = self.m_weights['representation']['model'](state)
                 d = self.m_weights['backbone']['model'](h, a_targets)
-
                 if self.E_DB is not None:
                     if epoch == 0 and encoder == True:
                         self.E_DB = ToolBox.build_embedding_db(
@@ -384,7 +427,6 @@ class Agent:
                         d_hold = torch.cat([d_hold, c])
                     d = d_hold
                     del d_hold
-
                 v = self.m_weights['value']['model'](d)
                 p = self.m_weights['policy']['model'](d)
                 s = self.m_weights['state']['model'](d)
@@ -399,40 +441,52 @@ class Agent:
                 p_loss = bce(p, p_targets) #Apply loss function to results
                 r_loss = mse(r, r_targets) #Apply loss function to results
                 s_loss = mse(s, s_h) #Apply loss function to results
-
+                #Update value head weights
                 total_loss['value loss'] += v_loss.item()
                 v_optimizer.zero_grad()
                 v_loss.backward(
                     inputs = list(self.m_weights['value']['model'].parameters())
-                ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['value']['model'].parameters(), 0.5)
+                )
+                torch.nn.utils.clip_grad_norm_(
+                    self.m_weights['value']['model'].parameters(),
+                    self.training_settings['v_max_norm']
+                )
                 v_optimizer.step()
                 v_scheduler.step()
-
+                #Update policy head weights
                 total_loss['policy loss'] += p_loss.item()
                 p_optimizer.zero_grad()
                 p_loss.backward(
                     inputs = list(self.m_weights['policy']['model'].parameters())
-                ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['policy']['model'].parameters(), 0.5)
+                )
+                torch.nn.utils.clip_grad_norm_(
+                    self.m_weights['policy']['model'].parameters(),
+                    self.training_settings['p_max_norm']
+                )
                 p_optimizer.step()
                 p_scheduler.step()
-
+                #Update next state representation head weights
                 total_loss['state loss'] += s_loss.item()
                 s_optimizer.zero_grad()
                 s_loss.backward(
                     inputs = list(self.m_weights['state']['model'].parameters())
-                ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['state']['model'].parameters(), 0.5)
+                )
+                torch.nn.utils.clip_grad_norm_(
+                    self.m_weights['state']['model'].parameters(),
+                    self.training_settings['s_max_norm']
+                )
                 s_optimizer.step()
                 s_scheduler.step()
-
+                #Update reward head weights
                 total_loss['reward loss'] += r_loss.item()
                 r_optimizer.zero_grad()
                 r_loss.backward(
                     inputs = list(self.m_weights['reward']['model'].parameters())
-                ) #Backpropegate through model
-                torch.nn.utils.clip_grad_norm_(self.m_weights['reward']['model'].parameters(), 0.5)
+                )
+                torch.nn.utils.clip_grad_norm_(
+                    self.m_weights['reward']['model'].parameters(),
+                    self.training_settings['r_max_norm']
+                )
                 r_optimizer.step()
                 r_scheduler.step()
 

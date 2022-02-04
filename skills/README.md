@@ -8,12 +8,13 @@ Folder where all interaction with exteral tasks occur. For each task a small wra
   "data": {
     "token_bank":"skills/chess/data/token_bank.csv",
     "active-models":{
-      "representation":"skills/chess/data/models/h_new.pth.tar",
-      "backbone":"skills/chess/data/models/g_new.pth.tar",
-      "value":"skills/chess/data/models/v_new.pth.tar",
-      "policy":"skills/chess/data/models/p_new.pth.tar",
-      "state":"skills/chess/data/models/s_new.pth.tar",
-      "reward":"skills/chess/data/models/r_new.pth.tar"
+      "representation":"h.pth.tar",
+      "backbone":"g.pth.tar",
+      "value":"v.pth.tar",
+      "policy":"p.pth.tar",
+      "state":"s.pth.tar",
+      "reward":"r.pth.tar",
+      "cca":"cca.pth.tar"
     }
   },
   "search":{
@@ -23,6 +24,7 @@ Folder where all interaction with exteral tasks occur. For each task a small wra
       [1000000, 0.25]
     ],
     "sim_amt": 25,
+    "workers":2,
     "c1":1.25,
     "c2":19652,
     "d_a":0.3,
@@ -47,14 +49,16 @@ Folder where all interaction with exteral tasks occur. For each task a small wra
     "h_inner":400,
     "policy_inner":400,
     "reward_inner":400,
-    "state_k_inner":400,
+    "state_inner":400,
+    "chunked_inner":64,
     "cross_heads":4,
     "self_heads":4,
     "h_heads":4,
     "value_heads":4,
     "policy_heads":4,
     "reward_heads":4,
-    "state_k_heads":4,
+    "state_heads":4,
+    "chunked_heads":1,
     "encoder_dropout":0.5,
     "cross_dropout":0.5,
     "self_dropout":0.5,
@@ -62,12 +66,40 @@ Folder where all interaction with exteral tasks occur. For each task a small wra
     "value_dropout":0.5,
     "policy_dropout":0.5,
     "reward_dropout":0.5,
-    "state_k_dropout":0.5
+    "state_dropout":0.5,
+    "chunked_dropout":0.5,
+    "chunked_length":4,
+    "neighbour_amt":2,
+    "moe_k":1,
+    "experts":1,
+    "moe":false,
+    "retro":false
   },
   "training": {
     "bsz": 10,
     "lr": 0.0001,
-    "epoch": 10
+    "epoch": 10,
+    "h_step":1,
+    "b_step":1,
+    "cca_step":1,
+    "v_step":1,
+    "p_step":1,
+    "s_step":1,
+    "r_step":1,
+    "h_gamma":0.1,
+    "b_gamma":0.1,
+    "cca_gamma":0.1,
+    "v_gamma":0.1,
+    "p_gamma":0.1,
+    "s_gamma":0.1,
+    "r_gamma":0.1,
+    "h_max_norm":0.5,
+    "b_max_norm":0.5,
+    "cca_max_norm":0.5,
+    "v_max_norm":0.5,
+    "p_max_norm":0.5,
+    "s_max_norm":0.5,
+    "r_max_norm":0.5
   }
 }
 ```

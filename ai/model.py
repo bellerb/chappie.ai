@@ -5,7 +5,7 @@ from torch import nn
 
 from einops import rearrange, repeat, reduce
 
-class FFN(nn.Module):
+class FFNN(nn.Module):
     def __init__(
         self,
         input_size,
@@ -16,7 +16,7 @@ class FFN(nn.Module):
         activation = True,
         normalize = True
     ):
-        super(FFN, self).__init__()
+        super(FFNN, self).__init__()
         self.linear = nn.Sequential(
             nn.Linear(
                 input_size,
@@ -30,12 +30,13 @@ class FFN(nn.Module):
             self.activation = True
         else:
             self.activation = False
+        self.n_dim = n_dim
         self.normalize = True if normalize == True else False
 
     def forward(self, x):
         z = self.linear(x)
         if self.normalize == True:
-            z = nn.functional.normalize(z, dim=n_dim)
+            z = nn.functional.normalize(z, dim=self.n_dim)
         if self.activation == True:
             z = self.GELU(z)
         return z
@@ -294,7 +295,9 @@ class DecoderOnlyTransformer(nn.Module):
         layer_size = 64,
         heads = 1,
         dropout = 0.5,
-        moe = False
+        moe = False,
+        expert_count = 1,
+        k = 1
     ):
         """
         Input: input_size - integer representing the size of the input data
@@ -312,7 +315,7 @@ class DecoderOnlyTransformer(nn.Module):
             dropout = dropout
         )
         if moe == False:
-            self.linear = self.FNN(
+            self.linear = FFNN(
                 input_size,
                 layer_size = input_size,
                 dropout = dropout,
@@ -320,12 +323,12 @@ class DecoderOnlyTransformer(nn.Module):
                 n_dim = -1
             )
         else:
-            self.linear = self.MoE(
+            self.linear = MoE(
                 input_size,
                 expert_count,
-                hidden_layers=64,
-                k = 2,
-                dropout = 0.5
+                hidden_layers=input_size,
+                k = k,
+                dropout = dropout
             )
         '''
         self.linear = nn.Sequential(
