@@ -4,6 +4,7 @@ import random
 from copy import deepcopy
 from numpy import isnan
 from numpy.random import dirichlet
+from einops import rearrange
 #import hashlib
 
 from tools.toolbox import ToolBox
@@ -188,6 +189,8 @@ class MCTS:
         #ADD NOISE TO SEARCH
         if noise == True:
             p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
+        else:
+            p = rearrange(p, 'z y x -> z (y x)')
         #MASK LEGAL MOVES ON FIRST SIM
         if mask is not None:
             for i, m in enumerate(mask):

@@ -152,7 +152,7 @@ class Agent:
         else:
             self.noise = False
         #Decay tempature with as more training games played to cause pUCT formula to become more exploitative
-        #self.T = m_param['search']['T'] 
+        #self.T = m_param['search']['T']
         self.T = 1 #Decay tempature
         self.sim_amt = m_param['search']['sim_amt'] #Amount of simulations to run
         self.workers = m_param['search']['workers'] #Amount of threads in search
@@ -329,6 +329,7 @@ class Agent:
             for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
                 state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
                 if epoch == 0 and encoder == True:
+                    #Train representation layer
                     h = self.m_weights['representation']['model'](state)
                     d = self.m_weights['backbone']['model'](h, a_targets)
 
@@ -362,8 +363,7 @@ class Agent:
                     r_loss = mse(r, r_targets) #Apply loss function to results
                     s_loss = mse(s, s_h) #Apply loss function to results
                     h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
-                    d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
-                    cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+
                     #Update hidden layer weights
                     h_optimizer.zero_grad()
                     total_loss['hidden loss'] += h_loss.item()
@@ -377,6 +377,41 @@ class Agent:
                     )
                     h_optimizer.step()
                     h_scheduler.step()
+
+                    #Train Backbone Layer
+                    h = self.m_weights['representation']['model'](state)
+                    d = self.m_weights['backbone']['model'](h, a_targets)
+                    if self.E_DB is not None:
+                        d_hold = torch.tensor([])
+                        for i, row in enumerate(d):
+                            chunks = row.reshape(
+                                self.m_weights['cca']['model'].l,
+                                self.m_weights['cca']['model'].m,
+                                self.m_weights['cca']['model'].d
+                            )[:self.m_weights['cca']['model'].l - 1]
+                            neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                            c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                            c = c.reshape(1, c.size(0), c.size(1))
+                            d_hold = torch.cat([d_hold, c])
+                        d = d_hold
+                        del d_hold
+
+                    v = self.m_weights['value']['model'](d)
+                    p = self.m_weights['policy']['model'](d)
+                    s = self.m_weights['state']['model'](d)
+                    r = self.m_weights['reward']['model'](d)
+                    s_h = self.m_weights['representation']['model'](s_targets)
+
+                    v = rearrange(v, 'b y x -> b (y x)')
+                    p = rearrange(p, 'b y x -> b (y x)')
+                    r = rearrange(r, 'b y x -> b (y x)')
+
+                    v_loss = mse(v, v_targets) #Apply loss function to results
+                    p_loss = bce(p, p_targets) #Apply loss function to results
+                    r_loss = mse(r, r_targets) #Apply loss function to results
+                    s_loss = mse(s, s_h) #Apply loss function to results
+                    d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+
                     #Update backbone layer weights
                     total_loss['backbone loss'] += d_loss.item()
                     g_optimizer.zero_grad()
@@ -390,8 +425,43 @@ class Agent:
                     )
                     g_optimizer.step()
                     g_scheduler.step()
-                    #Update chunked cross-attention layer weights
+
+
+                    #Train Chunked Cross Atention Layer
                     if self.E_DB is not None:
+                        h = self.m_weights['representation']['model'](state)
+                        d = self.m_weights['backbone']['model'](h, a_targets)
+                        d_hold = torch.tensor([])
+                        for i, row in enumerate(d):
+                            chunks = row.reshape(
+                                self.m_weights['cca']['model'].l,
+                                self.m_weights['cca']['model'].m,
+                                self.m_weights['cca']['model'].d
+                            )[:self.m_weights['cca']['model'].l - 1]
+                            neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                            c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                            c = c.reshape(1, c.size(0), c.size(1))
+                            d_hold = torch.cat([d_hold, c])
+                        d = d_hold
+                        del d_hold
+
+                        v = self.m_weights['value']['model'](d)
+                        p = self.m_weights['policy']['model'](d)
+                        s = self.m_weights['state']['model'](d)
+                        r = self.m_weights['reward']['model'](d)
+                        s_h = self.m_weights['representation']['model'](s_targets)
+
+                        v = rearrange(v, 'b y x -> b (y x)')
+                        p = rearrange(p, 'b y x -> b (y x)')
+                        r = rearrange(r, 'b y x -> b (y x)')
+
+                        v_loss = mse(v, v_targets) #Apply loss function to results
+                        p_loss = bce(p, p_targets) #Apply loss function to results
+                        r_loss = mse(r, r_targets) #Apply loss function to results
+                        s_loss = mse(s, s_h) #Apply loss function to results
+                        cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+
+                        #Update chunked cross-attention layer weights
                         total_loss['Cca loss'] += cca_loss.item()
                         cca_optimizer.zero_grad()
                         cca_loss.backward(
@@ -404,7 +474,9 @@ class Agent:
                         )
                         cca_optimizer.step()
                         cca_scheduler.step()
-                #Calculate loss values
+
+
+                #Train Model Head Layers
                 h = self.m_weights['representation']['model'](state)
                 d = self.m_weights['backbone']['model'](h, a_targets)
                 if self.E_DB is not None:

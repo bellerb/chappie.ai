@@ -39,18 +39,18 @@ if __name__ == '__main__':
             #EPD = '1b4k1/Q7/p2np1/P1P2p2/1P3P2/1R5R/q6P/5rK1 b - -',
             players = [
                 #'skills/chess/data/models/test',
-                'skills/chess/data/models/test_V2',
+                'skills/chess/data/models/test_V3',
                 'human'
             ]
         )
     elif task == 1:
         chess = chess()
         chess.traing_session(
-            loops = 2,
-            games = 1,
+            loops = 3,
+            games = 20,
             boards = 1,
             best_of = 3,
             #player = 'skills/chess/data/models/test',
-            player = 'skills/chess/data/models/test_V2',
+            player = 'skills/chess/data/models/test_V3',
             SILENT = False
         )
