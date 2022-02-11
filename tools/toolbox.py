@@ -120,7 +120,7 @@ class ToolBox:
             S_p1 = 1
             S_p2 = 0
         else:
-            s_p1 = S_p2 = 0.5
+            S_p1 = S_p2 = 0.5
 
         ELO_p1 = p1 + (k * (S_p1 - E_p1))
         ELO_p2 = p2 + (k * (S_p2 - E_p2))

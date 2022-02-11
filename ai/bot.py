@@ -223,76 +223,76 @@ class Agent:
         Output: dataframe containing the training log
         """
         #Training loss functions
-        mse = torch.nn.MSELoss() #Mean squared error loss
-        bce = torch.nn.BCELoss() #Binary cross entropy loss
+        self.mse = torch.nn.MSELoss() #Mean squared error loss
+        self.bce = torch.nn.BCELoss() #Binary cross entropy loss
         #Hidden layer settings
-        h_optimizer = torch.optim.Adam(
+        self.h_optimizer = torch.optim.Adam(
             self.m_weights['representation']['model'].parameters(),
             lr=self.training_settings['lr']
         )
-        h_scheduler = torch.optim.lr_scheduler.StepLR(
-            h_optimizer,
+        self.h_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.h_optimizer,
             self.training_settings['h_step'],
             gamma=self.training_settings['h_gamma']
         )
         #Backbone layer settings
-        g_optimizer = torch.optim.Adam(
+        self.g_optimizer = torch.optim.Adam(
             self.m_weights['backbone']['model'].parameters(),
             lr=self.training_settings['lr']
         )
-        g_scheduler = torch.optim.lr_scheduler.StepLR(
-            g_optimizer,
+        self.g_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.g_optimizer,
             self.training_settings['b_step'],
             gamma=self.training_settings['b_gamma']
         )
         #Chunked cross-attention layer settings
         if self.E_DB is not None:
-            cca_optimizer = torch.optim.Adam(
+            self.cca_optimizer = torch.optim.Adam(
                 self.m_weights['cca']['model'].parameters(),
                 lr=self.training_settings['lr']
             )
-            cca_scheduler = torch.optim.lr_scheduler.StepLR(
-                cca_optimizer,
+            self.cca_scheduler = torch.optim.lr_scheduler.StepLR(
+                self.cca_optimizer,
                 self.training_settings['cca_step'],
                 gamma=self.training_settings['cca_gamma']
             )
         #Value head settings
-        v_optimizer = torch.optim.Adam(
+        self.v_optimizer = torch.optim.Adam(
             self.m_weights['value']['model'].parameters(),
             lr=self.training_settings['lr']
         )
-        v_scheduler = torch.optim.lr_scheduler.StepLR(
-            v_optimizer,
+        self.v_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.v_optimizer,
             self.training_settings['v_step'],
             gamma=self.training_settings['v_gamma']
         )
         #Policy head settings
-        p_optimizer = torch.optim.Adam(
+        self.p_optimizer = torch.optim.Adam(
             self.m_weights['policy']['model'].parameters(),
             lr=self.training_settings['lr']
         )
-        p_scheduler = torch.optim.lr_scheduler.StepLR(
-            p_optimizer,
+        self.p_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.p_optimizer,
             self.training_settings['p_step'],
             gamma=self.training_settings['p_gamma']
         )
         #Next state representation head settings
-        s_optimizer = torch.optim.Adam(
+        self.s_optimizer = torch.optim.Adam(
             self.m_weights['state']['model'].parameters(),
             lr=self.training_settings['lr']
         )
-        s_scheduler = torch.optim.lr_scheduler.StepLR(
-            s_optimizer,
+        self.s_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.s_optimizer,
             self.training_settings['s_step'],
             gamma=self.training_settings['s_gamma']
         )
         #Reward settings
-        r_optimizer = torch.optim.Adam(
+        self.r_optimizer = torch.optim.Adam(
             self.m_weights['reward']['model'].parameters(),
             lr=self.training_settings['lr']
         )
-        r_scheduler = torch.optim.lr_scheduler.StepLR(
-            r_optimizer,
+        self.r_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.r_optimizer,
             self.training_settings['r_step'],
             gamma=self.training_settings['r_gamma']
         )
@@ -310,260 +310,30 @@ class Agent:
         start_time = time.time() #Get time of starting process
         for epoch in range(self.training_settings['epoch']):
             t_steps = 0 #Current training step
-            total_loss = {
-                'hidden loss':0.,
-                'backbone loss':0.,
-                'Cca loss':0.,
-                'value loss':0.,
-                'policy loss':0.,
-                'state loss':0,
-                'reward loss':0.
-            }
-            if self.E_DB is None:
-                del total_loss['Cca loss'] #Remove Cca loss if layer not active
-            if encoder == False or epoch > 0:
-                del total_loss['hidden loss'] #Remove hidden loss if layer not active
-                del total_loss['backbone loss'] #Remove backbone loss if layer not active
+            self.total_loss = {'value loss':0., 'policy loss':0., 'state loss':0, 'reward loss':0.}
+            if self.E_DB is not None:
+                self.total_loss['Cca loss'] = 0.
+            if encoder == True and epoch == 0:
+                self.total_loss['hidden loss'] = 0.
+                self.total_loss['backbone loss'] = 0.
             if epoch == 1:
                 data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
             for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
                 state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
                 if epoch == 0 and encoder == True:
-                    #Train representation layer
-                    h = self.m_weights['representation']['model'](state)
-                    d = self.m_weights['backbone']['model'](h, a_targets)
-
+                    #Train trunk of model
+                    self.train_representation_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                    self.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
                     if self.E_DB is not None:
-                        d_hold = torch.tensor([])
-                        for i, row in enumerate(d):
-                            chunks = row.reshape(
-                                self.m_weights['cca']['model'].l,
-                                self.m_weights['cca']['model'].m,
-                                self.m_weights['cca']['model'].d
-                            )[:self.m_weights['cca']['model'].l - 1]
-                            neighbours = ToolBox.get_kNN(chunks, self.E_DB)
-                            c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
-                            c = c.reshape(1, c.size(0), c.size(1))
-                            d_hold = torch.cat([d_hold, c])
-                        d = d_hold
-                        del d_hold
-
-                    v = self.m_weights['value']['model'](d)
-                    p = self.m_weights['policy']['model'](d)
-                    s = self.m_weights['state']['model'](d)
-                    r = self.m_weights['reward']['model'](d)
-                    s_h = self.m_weights['representation']['model'](s_targets)
-
-                    v = rearrange(v, 'b y x -> b (y x)')
-                    p = rearrange(p, 'b y x -> b (y x)')
-                    r = rearrange(r, 'b y x -> b (y x)')
-
-                    v_loss = mse(v, v_targets) #Apply loss function to results
-                    p_loss = bce(p, p_targets) #Apply loss function to results
-                    r_loss = mse(r, r_targets) #Apply loss function to results
-                    s_loss = mse(s, s_h) #Apply loss function to results
-                    h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
-
-                    #Update hidden layer weights
-                    h_optimizer.zero_grad()
-                    total_loss['hidden loss'] += h_loss.item()
-                    h_loss.backward(
-                        retain_graph = True,
-                        inputs = list(self.m_weights['representation']['model'].parameters())
-                    )
-                    torch.nn.utils.clip_grad_norm_(
-                        self.m_weights['representation']['model'].parameters(),
-                        self.training_settings['h_max_norm']
-                    )
-                    h_optimizer.step()
-                    h_scheduler.step()
-
-                    #Train Backbone Layer
-                    h = self.m_weights['representation']['model'](state)
-                    d = self.m_weights['backbone']['model'](h, a_targets)
-                    if self.E_DB is not None:
-                        d_hold = torch.tensor([])
-                        for i, row in enumerate(d):
-                            chunks = row.reshape(
-                                self.m_weights['cca']['model'].l,
-                                self.m_weights['cca']['model'].m,
-                                self.m_weights['cca']['model'].d
-                            )[:self.m_weights['cca']['model'].l - 1]
-                            neighbours = ToolBox.get_kNN(chunks, self.E_DB)
-                            c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
-                            c = c.reshape(1, c.size(0), c.size(1))
-                            d_hold = torch.cat([d_hold, c])
-                        d = d_hold
-                        del d_hold
-
-                    v = self.m_weights['value']['model'](d)
-                    p = self.m_weights['policy']['model'](d)
-                    s = self.m_weights['state']['model'](d)
-                    r = self.m_weights['reward']['model'](d)
-                    s_h = self.m_weights['representation']['model'](s_targets)
-
-                    v = rearrange(v, 'b y x -> b (y x)')
-                    p = rearrange(p, 'b y x -> b (y x)')
-                    r = rearrange(r, 'b y x -> b (y x)')
-
-                    v_loss = mse(v, v_targets) #Apply loss function to results
-                    p_loss = bce(p, p_targets) #Apply loss function to results
-                    r_loss = mse(r, r_targets) #Apply loss function to results
-                    s_loss = mse(s, s_h) #Apply loss function to results
-                    d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
-
-                    #Update backbone layer weights
-                    total_loss['backbone loss'] += d_loss.item()
-                    g_optimizer.zero_grad()
-                    d_loss.backward(
-                        retain_graph = True,
-                        inputs = list(self.m_weights['backbone']['model'].parameters())
-                    )
-                    torch.nn.utils.clip_grad_norm_(
-                        self.m_weights['backbone']['model'].parameters(),
-                        self.training_settings['b_max_norm']
-                    )
-                    g_optimizer.step()
-                    g_scheduler.step()
-
-
-                    #Train Chunked Cross Atention Layer
-                    if self.E_DB is not None:
-                        h = self.m_weights['representation']['model'](state)
-                        d = self.m_weights['backbone']['model'](h, a_targets)
-                        d_hold = torch.tensor([])
-                        for i, row in enumerate(d):
-                            chunks = row.reshape(
-                                self.m_weights['cca']['model'].l,
-                                self.m_weights['cca']['model'].m,
-                                self.m_weights['cca']['model'].d
-                            )[:self.m_weights['cca']['model'].l - 1]
-                            neighbours = ToolBox.get_kNN(chunks, self.E_DB)
-                            c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
-                            c = c.reshape(1, c.size(0), c.size(1))
-                            d_hold = torch.cat([d_hold, c])
-                        d = d_hold
-                        del d_hold
-
-                        v = self.m_weights['value']['model'](d)
-                        p = self.m_weights['policy']['model'](d)
-                        s = self.m_weights['state']['model'](d)
-                        r = self.m_weights['reward']['model'](d)
-                        s_h = self.m_weights['representation']['model'](s_targets)
-
-                        v = rearrange(v, 'b y x -> b (y x)')
-                        p = rearrange(p, 'b y x -> b (y x)')
-                        r = rearrange(r, 'b y x -> b (y x)')
-
-                        v_loss = mse(v, v_targets) #Apply loss function to results
-                        p_loss = bce(p, p_targets) #Apply loss function to results
-                        r_loss = mse(r, r_targets) #Apply loss function to results
-                        s_loss = mse(s, s_h) #Apply loss function to results
-                        cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
-
-                        #Update chunked cross-attention layer weights
-                        total_loss['Cca loss'] += cca_loss.item()
-                        cca_optimizer.zero_grad()
-                        cca_loss.backward(
-                            retain_graph = True,
-                            inputs = list(self.m_weights['cca']['model'].parameters())
-                        )
-                        torch.nn.utils.clip_grad_norm_(
-                            self.m_weights['cca']['model'].parameters(),
-                            self.training_settings['cca_max_norm']
-                        )
-                        cca_optimizer.step()
-                        cca_scheduler.step()
-
-
-                #Train Model Head Layers
-                h = self.m_weights['representation']['model'](state)
-                d = self.m_weights['backbone']['model'](h, a_targets)
-                if self.E_DB is not None:
-                    if epoch == 0 and encoder == True:
-                        self.E_DB = ToolBox.build_embedding_db(
-                            self.m_weights['representation']['model'],
-                            self.m_weights['backbone']['model'],
-                            f_name = f'{folder}/logs/game_log.csv'.replace('(temp)','')
-                        )
-                    d_hold = torch.tensor([])
-                    for i, row in enumerate(d):
-                        chunks = row.reshape(
-                            self.m_weights['cca']['model'].l,
-                            self.m_weights['cca']['model'].m,
-                            self.m_weights['cca']['model'].d
-                        )[:self.m_weights['cca']['model'].l - 1]
-                        neighbours = ToolBox.get_kNN(chunks, self.E_DB)
-                        c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
-                        c = c.reshape(1, c.size(0), c.size(1))
-                        d_hold = torch.cat([d_hold, c])
-                    d = d_hold
-                    del d_hold
-                v = self.m_weights['value']['model'](d)
-                p = self.m_weights['policy']['model'](d)
-                s = self.m_weights['state']['model'](d)
-                r = self.m_weights['reward']['model'](d)
-                s_h = self.m_weights['representation']['model'](s_targets)
-
-                v = rearrange(v, 'b y x -> b (y x)')
-                p = rearrange(p, 'b y x -> b (y x)')
-                r = rearrange(r, 'b y x -> b (y x)')
-
-                v_loss = mse(v, v_targets) #Apply loss function to results
-                p_loss = bce(p, p_targets) #Apply loss function to results
-                r_loss = mse(r, r_targets) #Apply loss function to results
-                s_loss = mse(s, s_h) #Apply loss function to results
-                #Update value head weights
-                total_loss['value loss'] += v_loss.item()
-                v_optimizer.zero_grad()
-                v_loss.backward(
-                    inputs = list(self.m_weights['value']['model'].parameters())
-                )
-                torch.nn.utils.clip_grad_norm_(
-                    self.m_weights['value']['model'].parameters(),
-                    self.training_settings['v_max_norm']
-                )
-                v_optimizer.step()
-                v_scheduler.step()
-                #Update policy head weights
-                total_loss['policy loss'] += p_loss.item()
-                p_optimizer.zero_grad()
-                p_loss.backward(
-                    inputs = list(self.m_weights['policy']['model'].parameters())
-                )
-                torch.nn.utils.clip_grad_norm_(
-                    self.m_weights['policy']['model'].parameters(),
-                    self.training_settings['p_max_norm']
-                )
-                p_optimizer.step()
-                p_scheduler.step()
-                #Update next state representation head weights
-                total_loss['state loss'] += s_loss.item()
-                s_optimizer.zero_grad()
-                s_loss.backward(
-                    inputs = list(self.m_weights['state']['model'].parameters())
-                )
-                torch.nn.utils.clip_grad_norm_(
-                    self.m_weights['state']['model'].parameters(),
-                    self.training_settings['s_max_norm']
-                )
-                s_optimizer.step()
-                s_scheduler.step()
-                #Update reward head weights
-                total_loss['reward loss'] += r_loss.item()
-                r_optimizer.zero_grad()
-                r_loss.backward(
-                    inputs = list(self.m_weights['reward']['model'].parameters())
-                )
-                torch.nn.utils.clip_grad_norm_(
-                    self.m_weights['reward']['model'].parameters(),
-                    self.training_settings['r_max_norm']
-                )
-                r_optimizer.step()
-                r_scheduler.step()
-
+                        self.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                #Train heads of model
+                v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
+                self.update_value_layer(v, v_targets)
+                self.update_policy_layer(p, p_targets)
+                self.update_next_state_layer(s, s_h)
+                self.update_reward_layer(r, r_targets)
                 t_steps += 1
-            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in total_loss.items())}\n')
+            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in self.total_loss.items())}\n')
             t_log.append({
                 **{
                     'Date':datetime.now(),
@@ -571,7 +341,7 @@ class Agent:
                     'Samples':len(data),
                     'Time':time.time() - start_time
                 },
-                **{k:(v/t_steps) for k,v in total_loss.items()}
+                **{k:(v / t_steps) for k, v in self.total_loss.items()}
             })
         #Updated new model
         if folder is not None and os.path.exists(f'{folder}/weights') == False:
@@ -581,6 +351,215 @@ class Agent:
                 'state_dict': self.m_weights[m]['model'].state_dict(),
             }, f"{folder}/weights/{self.m_weights[m]['param']}" if folder is not None else self.m_weights[m]['param'])
         return t_log
+
+    def forward_pass(self, state, a_targets, s_targets):
+        """
+        Input: state - tensor representing the current state
+               a_targets - tensor representing the target actions
+               s_targets - tensor representing the state targets
+        Description: forward pass of the model
+        Output: tuple containing the output of the models heads
+        """
+        #Model trunk
+        h = self.m_weights['representation']['model'](state)
+        d = self.m_weights['backbone']['model'](h, a_targets)
+        if self.E_DB is not None:
+            d_hold = torch.tensor([])
+            for i, row in enumerate(d):
+                chunks = row.reshape(
+                    self.m_weights['cca']['model'].l,
+                    self.m_weights['cca']['model'].m,
+                    self.m_weights['cca']['model'].d
+                )[:self.m_weights['cca']['model'].l - 1]
+                neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
+                c = c.reshape(1, c.size(0), c.size(1))
+                d_hold = torch.cat([d_hold, c])
+            d = d_hold
+            del d_hold
+        #Model heads
+        v = self.m_weights['value']['model'](d)
+        v = rearrange(v, 'b y x -> b (y x)')
+        p = self.m_weights['policy']['model'](d)
+        p = rearrange(p, 'b y x -> b (y x)')
+        r = self.m_weights['reward']['model'](d)
+        r = rearrange(r, 'b y x -> b (y x)')
+        s = self.m_weights['state']['model'](d)
+        s_h = self.m_weights['representation']['model'](s_targets)
+        return v, p, r, s, s_h
+
+    def train_representation_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
+        """
+        Input: state - tensor representing the current state
+               a_targets - tensor representing the choosen actions
+               s_targets - tensor representing the next state head targets
+               v_targets - tensor representing the value head targets
+               p_targets - tensor representing the policy head targets
+               r_targets - tensor representing the reward head targets
+        Description: updating of the representation layers weights
+        Output: None
+        """
+        v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
+        v_loss = self.mse(v, v_targets) #Apply loss function to results
+        p_loss = self.bce(p, p_targets) #Apply loss function to results
+        r_loss = self.mse(r, r_targets) #Apply loss function to results
+        s_loss = self.mse(s, s_h) #Apply loss function to results
+        h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
+        #Update hidden layer weights
+        self.h_optimizer.zero_grad()
+        self.total_loss['hidden loss'] += h_loss.item()
+        h_loss.backward(
+            retain_graph = True,
+            inputs = list(self.m_weights['representation']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['representation']['model'].parameters(),
+            self.training_settings['h_max_norm']
+        )
+        self.h_optimizer.step()
+        self.h_scheduler.step()
+
+    def train_backbone_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
+        """
+        Input: state - tensor representing the current state
+               a_targets - tensor representing the choosen actions
+               s_targets - tensor representing the next state head targets
+               v_targets - tensor representing the value head targets
+               p_targets - tensor representing the policy head targets
+               r_targets - tensor representing the reward head targets
+        Description: updating of the backbone layers weights
+        Output: None
+        """
+        v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
+        v_loss = self.mse(v, v_targets) #Apply loss function to results
+        p_loss = self.bce(p, p_targets) #Apply loss function to results
+        r_loss = self.mse(r, r_targets) #Apply loss function to results
+        s_loss = self.mse(s, s_h) #Apply loss function to results
+        d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+        #Update backbone layer weights
+        self.total_loss['backbone loss'] += d_loss.item()
+        self.g_optimizer.zero_grad()
+        d_loss.backward(
+            retain_graph = True,
+            inputs = list(self.m_weights['backbone']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['backbone']['model'].parameters(),
+            self.training_settings['b_max_norm']
+        )
+        self.g_optimizer.step()
+        self.g_scheduler.step()
+
+    def train_cca_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
+        """
+        Input: state - tensor representing the current state
+               a_targets - tensor representing the choosen actions
+               s_targets - tensor representing the next state head targets
+               v_targets - tensor representing the value head targets
+               p_targets - tensor representing the policy head targets
+               r_targets - tensor representing the reward head targets
+        Description: updating of the chunked cross-attention layers weights
+        Output: None
+        """
+        v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
+        v_loss = self.mse(v, v_targets) #Apply loss function to results
+        p_loss = self.bce(p, p_targets) #Apply loss function to results
+        r_loss = self.mse(r, r_targets) #Apply loss function to results
+        s_loss = self.mse(s, s_h) #Apply loss function to results
+        cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
+        #Update chunked cross-attention layer weights
+        self.total_loss['Cca loss'] += cca_loss.item()
+        self.cca_optimizer.zero_grad()
+        cca_loss.backward(
+            retain_graph = True,
+            inputs = list(self.m_weights['cca']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['cca']['model'].parameters(),
+            self.training_settings['cca_max_norm']
+        )
+        self.cca_optimizer.step()
+        self.cca_scheduler.step()
+
+    def update_value_layer(self, v, v_targets):
+        """
+        Input: v - tensor representing the predicted value
+               v_targets - tensor representing the value head targets
+        Description: updating of the value layers weights
+        Output: None
+        """
+        v_loss = self.mse(v, v_targets) #Apply loss function to results
+        self.total_loss['value loss'] += v_loss.item()
+        self.v_optimizer.zero_grad()
+        v_loss.backward(
+            inputs = list(self.m_weights['value']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['value']['model'].parameters(),
+            self.training_settings['v_max_norm']
+        )
+        self.v_optimizer.step()
+        self.v_scheduler.step()
+
+    def update_policy_layer(self, p, p_targets):
+        """
+        Input: p - tensor representing the predicted policy
+               p_targets - tensor representing the value head targets
+        Description: updating of the policy layers weights
+        Output: None
+        """
+        p_loss = self.bce(p, p_targets) #Apply loss function to results
+        self.total_loss['policy loss'] += p_loss.item()
+        self.p_optimizer.zero_grad()
+        p_loss.backward(
+            inputs = list(self.m_weights['policy']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['policy']['model'].parameters(),
+            self.training_settings['p_max_norm']
+        )
+        self.p_optimizer.step()
+        self.p_scheduler.step()
+
+    def update_reward_layer(self, r, r_targets):
+        """
+        Input: r - tensor representing the predicted reward
+               r_targets - tensor representing the reward head targets
+        Description: updating of the value layers weights
+        Output: None
+        """
+        r_loss = self.mse(r, r_targets) #Apply loss function to results
+        self.total_loss['reward loss'] += r_loss.item()
+        self.r_optimizer.zero_grad()
+        r_loss.backward(
+            inputs = list(self.m_weights['reward']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['reward']['model'].parameters(),
+            self.training_settings['r_max_norm']
+        )
+        self.r_optimizer.step()
+        self.r_scheduler.step()
+
+    def update_next_state_layer(self, s, s_h):
+        """
+        Input: s - tensor representing the predicted next state representation
+               s_h - tensor representing the prediction representation encodings
+        Description: updating of the next state layers weights using self supervision
+        Output: None
+        """
+        s_loss = self.mse(s, s_h) #Apply loss function to results
+        self.total_loss['state loss'] += s_loss.item()
+        self.s_optimizer.zero_grad()
+        s_loss.backward(
+            inputs = list(self.m_weights['state']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['state']['model'].parameters(),
+            self.training_settings['s_max_norm']
+        )
+        self.s_optimizer.step()
+        self.s_scheduler.step()
 
     def get_batch(self, source, x, y, v_h = 'value', r_h = 'reward', s_h = 'state', p_h = 'prob', a_h = 'action'):
         """

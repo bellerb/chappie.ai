@@ -84,6 +84,10 @@ class chess:
                     if a_players[i] == 'human':
                         cur = input('What piece do you want to move?\n')
                         next = input('Where do you want to move the piece to?\n')
+                        a_map = np.zeros((8, 8, 8, 8))
+                        a_map[chess_game.y.index(cur[1])][chess_game.x.index(cur[0])][chess_game.y.index(next[1])][chess_game.x.index(next[0])] = 1
+                        a_map = a_map.flatten()
+                        b_a = np.where(a_map == 1)[0][0]
                     else:
                         legal = self.legal_moves(chess_game) #Filter legal moves for inital state
                         legal[legal == 0] = float('-inf')
@@ -294,7 +298,7 @@ class chess:
                             tie = True if state == [0, 0, 0] else False
                         )
                         train_data['ELO'] = [ELO[b_elo]] * len(train_data)
-                        print(cur_ELO, ELO, b_elo)
+                        #print(cur_ELO, ELO, b_elo)
                     train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
