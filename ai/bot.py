@@ -157,6 +157,7 @@ class Agent:
         self.sim_amt = m_param['search']['sim_amt'] #Amount of simulations to run
         self.workers = m_param['search']['workers'] #Amount of threads in search
         self.training_settings =  m_param['training'] #Training settings
+        #self.single_player = m_param['search']['single_player']
 
         if p_model['retro'] == True:
             self.E_DB = ToolBox.build_embedding_db(
@@ -343,6 +344,8 @@ class Agent:
                 },
                 **{k:(v / t_steps) for k, v in self.total_loss.items()}
             })
+        print('DONE')
+        quit()
         #Updated new model
         if folder is not None and os.path.exists(f'{folder}/weights') == False:
             os.makedirs(f'{folder}/weights') #Create folder
@@ -403,7 +406,7 @@ class Agent:
         v_loss = self.mse(v, v_targets) #Apply loss function to results
         p_loss = self.bce(p, p_targets) #Apply loss function to results
         r_loss = self.mse(r, r_targets) #Apply loss function to results
-        s_loss = self.mse(s, s_h) #Apply loss function to results
+        s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
         h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
         #Update hidden layer weights
         self.h_optimizer.zero_grad()
@@ -430,6 +433,30 @@ class Agent:
         Description: updating of the backbone layers weights
         Output: None
         """
+        print(a_targets[len(s_targets):])
+        h_0 = self.m_weights['representation']['model'](state[:len(s_targets)])
+        d_0 = self.m_weights['backbone']['model'](h_0, a_targets[len(s_targets):])
+
+        h_1 = self.m_weights['representation']['model'](s_targets)
+        d_1 = self.m_weights['backbone']['model'](h_1, torch.tensor([[0]] * len(s_targets)))
+
+        d_loss = self.mse(d_0, d_1) #Apply loss function to results
+
+        self.total_loss['backbone loss'] += d_loss.item()
+        self.g_optimizer.zero_grad()
+        d_loss.backward(
+            retain_graph = True,
+            inputs = list(self.m_weights['backbone']['model'].parameters())
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.m_weights['backbone']['model'].parameters(),
+            self.training_settings['b_max_norm']
+        )
+        self.g_optimizer.step()
+        self.g_scheduler.step()
+
+        '''
+
         v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
         v_loss = self.mse(v, v_targets) #Apply loss function to results
         p_loss = self.bce(p, p_targets) #Apply loss function to results
@@ -449,6 +476,7 @@ class Agent:
         )
         self.g_optimizer.step()
         self.g_scheduler.step()
+        '''
 
     def train_cca_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
         """
@@ -465,7 +493,7 @@ class Agent:
         v_loss = self.mse(v, v_targets) #Apply loss function to results
         p_loss = self.bce(p, p_targets) #Apply loss function to results
         r_loss = self.mse(r, r_targets) #Apply loss function to results
-        s_loss = self.mse(s, s_h) #Apply loss function to results
+        s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
         cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
         #Update chunked cross-attention layer weights
         self.total_loss['Cca loss'] += cca_loss.item()
@@ -548,7 +576,7 @@ class Agent:
         Description: updating of the next state layers weights using self supervision
         Output: None
         """
-        s_loss = self.mse(s, s_h) #Apply loss function to results
+        s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
         self.total_loss['state loss'] += s_loss.item()
         self.s_optimizer.zero_grad()
         s_loss.backward(
@@ -588,9 +616,11 @@ class Agent:
         a_0 = pd.DataFrame([{a_h:0} for _ in range(len(a))])
 
         s_1 = source[s_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
+        #s_1[f'{s_h}0'] = np.where(s_1[f'{s_h}0'] == 0., 1., 0.)
         if True in s_1.iloc[-1].isna().tolist():
             s_1.iloc[-1] = s.iloc[-1]
-            s_1[f'{s_h}0'].iloc[-1] = 0 if s_1[f'{s_h}0'].iloc[-1] == 1 else 1
+            #if self.single_player == False:
+                #s_1[f'{s_h}0'].iloc[-1] = 0 if s_1[f'{s_h}0'].iloc[-1] == 1 else 1
 
         p_1 = source[p_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
         if True in p_1.iloc[-1].isna().tolist():
@@ -607,7 +637,8 @@ class Agent:
         state = s.append(s, ignore_index = True)
         state = torch.tensor(state.values)
 
-        s_target = s.append(s_1, ignore_index = True)
+        #s_target = s_1.append(s_1, ignore_index = True)
+        s_target = s_1
         s_target = torch.tensor(s_target.values)
 
         p_target = p.append(p_1, ignore_index = True)

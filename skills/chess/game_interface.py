@@ -206,16 +206,17 @@ class chess:
                     )
                 else:
                     os.makedirs(f'{n_player}/weights')
-        game_results = {'white':0, 'black':0, 'tie':0}
         train_data = pd.DataFrame()
         #Begin training games
         for _ in range(LOOPS):
             for t, g_count in enumerate([T_GAMES, BEST_OF]):
                 if t == 0:
                     a_players = [f'{n_player}/parameters.json'] #Self-play
+                    game_results = {'white':0, 'black':0, 'tie':0}
                     pass
                 else:
                     a_players = [f'{player}/parameters.json', f'{n_player}/parameters.json'] #Evaluate
+                    game_results = {f'{player}/parameters.json':0, f'{n_player}/parameters.json':0, 'tie':0}
                     pass
                 for g in range(g_count):
                     #PLAY GAME
@@ -321,31 +322,6 @@ class chess:
                         del m_log
                         t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
                         del t_log
-                    '''
-                    if os.path.exists(f'{player}/logs') == False:
-                        os.makedirs(f'{player}/logs') #Create folder
-                    t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
-                    if os.path.exists(f'{player}/logs/game_log.csv'):
-                        g_log = pd.read_csv(f'{player}/logs/game_log.csv')
-                    else:
-                        g_log = pd.DataFrame()
-                    if t == 0:
-                        train_data['ELO'] = [''] * len(train_data)
-                    else:
-                        cur_ELO = g_log['ELO'].dropna().iloc[-1] if 'ELO' in g_log and len(g_log['ELO'].dropna()) > 0 else 0
-                        ELO = ToolBox.update_ELO(
-                            cur_ELO, #ELO_p1,
-                            cur_ELO,  #ELO_p2
-                            tie = True if state == [0, 0, 0] else False
-                        )
-                        train_data['ELO'] = [ELO[b_elo]] * len(train_data)
-                        print(cur_ELO, ELO, b_elo)
-                    train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
-                    train_data['Date'] = [datetime.now()] * len(train_data)
-                    g_log = g_log.append(train_data, ignore_index=True)
-                    g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
-                    '''
-
                     #GARBEGE CLEAN UP
                     del g_log
                     train_data = pd.DataFrame()
@@ -356,4 +332,3 @@ class chess:
                             f'{n_player}/weights',
                             f'{player}/weights'
                         ) #Move model data over if none exists
-        #rmtree(n_player) #Remove temporary model folder

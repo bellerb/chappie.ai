@@ -77,8 +77,8 @@ if __name__ == '__main__':
             )
             chess = chess()
             chess.traing_session(
-                loops = 1,
-                games = 20,
+                loops = 3,
+                games = 1,
                 boards = 1,
                 best_of = 3,
                 #player = 'skills/chess/data/models/test',
