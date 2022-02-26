@@ -334,6 +334,15 @@ class Agent:
                 self.update_next_state_layer(s, s_h)
                 self.update_reward_layer(r, r_targets)
                 t_steps += 1
+            #Learning rate decay
+            self.h_scheduler.step()
+            self.g_scheduler.step()
+            if self.E_DB is not None:
+                self.cca_scheduler.step()
+            self.v_scheduler.step()
+            self.p_scheduler.step()
+            self.r_scheduler.step()
+            self.s_scheduler.step()
             print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in self.total_loss.items())}\n')
             t_log.append({
                 **{
@@ -344,8 +353,6 @@ class Agent:
                 },
                 **{k:(v / t_steps) for k, v in self.total_loss.items()}
             })
-        print('DONE')
-        quit()
         #Updated new model
         if folder is not None and os.path.exists(f'{folder}/weights') == False:
             os.makedirs(f'{folder}/weights') #Create folder
@@ -420,7 +427,6 @@ class Agent:
             self.training_settings['h_max_norm']
         )
         self.h_optimizer.step()
-        self.h_scheduler.step()
 
     def train_backbone_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
         """
@@ -433,7 +439,6 @@ class Agent:
         Description: updating of the backbone layers weights
         Output: None
         """
-        print(a_targets[len(s_targets):])
         h_0 = self.m_weights['representation']['model'](state[:len(s_targets)])
         d_0 = self.m_weights['backbone']['model'](h_0, a_targets[len(s_targets):])
 
@@ -453,7 +458,6 @@ class Agent:
             self.training_settings['b_max_norm']
         )
         self.g_optimizer.step()
-        self.g_scheduler.step()
 
         '''
 
@@ -507,7 +511,6 @@ class Agent:
             self.training_settings['cca_max_norm']
         )
         self.cca_optimizer.step()
-        self.cca_scheduler.step()
 
     def update_value_layer(self, v, v_targets):
         """
@@ -527,7 +530,6 @@ class Agent:
             self.training_settings['v_max_norm']
         )
         self.v_optimizer.step()
-        self.v_scheduler.step()
 
     def update_policy_layer(self, p, p_targets):
         """
@@ -547,7 +549,6 @@ class Agent:
             self.training_settings['p_max_norm']
         )
         self.p_optimizer.step()
-        self.p_scheduler.step()
 
     def update_reward_layer(self, r, r_targets):
         """
@@ -567,7 +568,6 @@ class Agent:
             self.training_settings['r_max_norm']
         )
         self.r_optimizer.step()
-        self.r_scheduler.step()
 
     def update_next_state_layer(self, s, s_h):
         """
@@ -587,7 +587,6 @@ class Agent:
             self.training_settings['s_max_norm']
         )
         self.s_optimizer.step()
-        self.s_scheduler.step()
 
     def get_batch(self, source, x, y, v_h = 'value', r_h = 'reward', s_h = 'state', p_h = 'prob', a_h = 'action'):
         """

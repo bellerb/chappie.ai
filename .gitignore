@@ -1,4 +1,6 @@
 __pycache__/
+notebooks/
+skills/chess/data/models/
+skills/chess/data/archive/
 .json
 .csv
-tasks/games/casino/
