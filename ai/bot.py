@@ -335,10 +335,11 @@ class Agent:
                 self.update_reward_layer(r, r_targets)
                 t_steps += 1
             #Learning rate decay
-            self.h_scheduler.step()
-            self.g_scheduler.step()
-            if self.E_DB is not None:
-                self.cca_scheduler.step()
+            if epoch == 0 and encoder == True:
+                self.h_scheduler.step()
+                self.g_scheduler.step()
+                if self.E_DB is not None:
+                    self.cca_scheduler.step()
             self.v_scheduler.step()
             self.p_scheduler.step()
             self.r_scheduler.step()

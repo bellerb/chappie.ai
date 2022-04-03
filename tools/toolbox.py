@@ -101,6 +101,32 @@ class ToolBox:
                     f"{p2}/{m}"
                 ) #Overwrite active model with new model
 
+    def give_options(o_bank):
+        """
+        Input: o_bank - list of strings representing options
+        Description: get user input from option bank
+        Output: integer representing the index of the option
+        """
+        choice = -1
+        while True:
+            u_in = input(''.join(f'* {o}\n' for o in o_bank) + '\n')
+            for i, o in enumerate(o_bank):
+                o_hold = str(o).lower().split(' ')
+                if str(u_in).lower() == str(o_hold[0]).lower() or str(u_in).lower() == str(o_hold[0]).lower()+' '+str(o_hold[1]).lower() or str(u_in).lower() == str(o_hold[-1]).replace('(','').replace(')','').lower():
+                    choice = i
+                    break
+            if choice == -1:
+                print(
+    '''
+    -------------------------------------------------
+     Invalid option, plase select an option.
+    -------------------------------------------------
+    '''
+                )
+            else:
+                break
+        return choice
+
     def update_ELO(p1, p2, k = 32, tie = False):
         """
         Input: p1 - float representing the winning players current ELO

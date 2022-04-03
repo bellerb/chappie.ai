@@ -89,6 +89,7 @@ class chess:
                         a_map = a_map.flatten()
                         b_a = np.where(a_map == 1)[0][0]
                     else:
+                        t1 = datetime.now()
                         legal = self.legal_moves(chess_game) #Filter legal moves for inital state
                         legal[legal == 0] = float('-inf')
                         probs, v, r = a_players[i].choose_action(enc_state, legal_moves = legal)
@@ -128,7 +129,7 @@ class chess:
                             log.append({
                                 **{f'state{i}':float(s) for i, s in enumerate(enc_state[0])},
                                 **{f'prob{x}':p for x, p in enumerate(probs)},
-                                **{'action':b_a}
+                                **{'action':b_a, 'time':(datetime.now() - t1).total_seconds()}
                             })
                         if SILENT == False or a_players[i] == 'human':
                             if chess_game.p_move > 0:

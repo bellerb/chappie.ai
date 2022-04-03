@@ -1,26 +1,6 @@
 import os
+from tools.toolbox import ToolBox
 from skills.chess.game_interface import chess
-
-def give_options(o_bank):
-    choice = -1
-    while True:
-        u_in = input(''.join(f'* {o}\n' for o in o_bank) + '\n')
-        for i, o in enumerate(o_bank):
-            o_hold = str(o).lower().split(' ')
-            if str(u_in).lower() == str(o_hold[0]).lower() or str(u_in).lower() == str(o_hold[0]).lower()+' '+str(o_hold[1]).lower() or str(u_in).lower() == str(o_hold[-1]).replace('(','').replace(')','').lower():
-                choice = i
-                break
-        if choice == -1:
-            print(
-'''
--------------------------------------------------
- Invalid option, plase select an option.
--------------------------------------------------
-'''
-            )
-        else:
-            break
-    return choice
 
 if __name__ == '__main__':
     print(
@@ -39,7 +19,7 @@ if __name__ == '__main__':
     o_bank = [
         'Chess (c)'
     ]
-    task = give_options(o_bank)
+    task = ToolBox.give_options(o_bank)
     if task == 0:
         print(
 '''
@@ -54,7 +34,7 @@ if __name__ == '__main__':
             'Train    (t)',
             'Evaluate (e)'
         ]
-        task = give_options(c_tasks)
+        task = ToolBox.give_options(c_tasks)
         if task == 0:
             print(
 '''
@@ -66,7 +46,7 @@ if __name__ == '__main__':
             )
             players = ['human']
             col_choice = ['White (w)','Black (b)']
-            p_col = give_options(col_choice)
+            p_col = ToolBox.give_options(col_choice)
             if p_col == 0:
                 players.append('skills/chess/data/models/test_V3/parameters.json')
             else:
@@ -96,12 +76,12 @@ Please select which bot you would like to train?
 -------------------------------------------------
 '''
             )
-            p_col = give_options(model_list)
+            p_col = ToolBox.give_options(model_list)
             player = f'skills/chess/data/models/{model_list[p_col].split("(")[0].strip()}'
             chess = chess()
             chess.traing_session(
-                loops = 2,
-                games = 20,
+                loops = 40,
+                games = 1,
                 boards = 1,
                 best_of = 3,
                 player = player,
@@ -117,7 +97,7 @@ Please select a bot to play white?
 -------------------------------------------------
 '''
             )
-            p_col = give_options(model_list)
+            p_col = ToolBox.give_options(model_list)
             players.append(f'skills/chess/data/models/{model_list[p_col].split("(")[0].strip()}/parameters.json')
             print(
 '''
@@ -126,7 +106,7 @@ Please select a bot to play black?
 -------------------------------------------------
 '''
             )
-            p_col = give_options(model_list)
+            p_col = ToolBox.give_options(model_list)
             players.append(f'skills/chess/data/models/{model_list[p_col].split("(")[0].strip()}/parameters.json')
             chess = chess()
             print(
