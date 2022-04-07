@@ -11,8 +11,8 @@ class ToolBox:
         """
         Input: representation - model used to create game state representations
                backbone - model used as the backbone of our multi task model
-               f_name - string representing the game state data (default = None) [OPTIONAL]
-               s_header - string representing the main name used in game state token database (default = 'state') [OPTIONAL]
+               f_name - string representing the game state data (Default = None) [OPTIONAL]
+               s_header - string representing the main name used in game state token database (Default = 'state') [OPTIONAL]
         Description: builds embedding database from tokens
         Output: dataframe containing embeddings
         """
@@ -131,8 +131,8 @@ class ToolBox:
         """
         Input: p1 - float representing the winning players current ELO
                p2 - float representing the loosing players current ELO
-               k - integer representing ELO hyperparameter (default = 32) [OPTIONAL]
-               tie - boolean control for if game was a tie or not (default = False) [OPTIONAL]
+               k - integer representing ELO hyperparameter (Default = 32) [OPTIONAL]
+               tie - boolean control for if game was a tie or not (Default = False) [OPTIONAL]
         Description: update players ELO after game
         Output: tuple containing updated player 1 and player 2 ELO
         """

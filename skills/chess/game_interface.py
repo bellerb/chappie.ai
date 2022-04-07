@@ -42,15 +42,19 @@ class chess:
         players = [
             'skills/chess/data/active_param.json',
             'human'
-        ]
+        ],
+        tie_min = 100,
+        game_max = float('inf')
     ):
         """
         Input: game_name - string representing the name of the match
                epoch - integer representing the current epoch
-               train - boolean used as training control (default = False) [OPTIONAL]
-               EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
-               SILENT - boolean used for control of displaying stats or not (default = True) [OPTIONAL]
-               players - list containing the player paramater files (default = ['skills/chess/data/active_param.json', 'human']
+               train - boolean used as training control (Default = False) [OPTIONAL]
+               EPD - string representing the EPD hash to load the board into (Default = None) [OPTIONAl]
+               SILENT - boolean used for control of displaying stats or not (Default = True) [OPTIONAL]
+               players - list containing the player paramater files (Default = ['skills/chess/data/active_param.json', 'human'] [OPTIONAL]
+               tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
+               game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
         Description: play a game of chess
         Output: tuple containing the game outcome and a dataframe containing the game log
         """
@@ -138,12 +142,12 @@ class chess:
                                 print(f'b {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
                         if a_players[i] != 'human':
                             state = chess_game.check_state(chess_game.EPD_hash())
-                            if state == '50M' or state == '3F':
+                            if ((state == '50M' or state == '3F') and len(log) > tie_min) or len(log) >= game_max:
                                 state = [0, 1, 0] #Auto tie
                             elif state == 'PP':
                                 chess_game.pawn_promotion(n_part='Q') #Auto queen
                             if state != [0, 1, 0]:
-                                state = chess_game.is_end()
+                                state = chess_game.is_end() if len(log) > tie_min else chess_game.is_end(choice=False)
                         else:
                             state = chess_game.is_end()
                             if state == [0, 0, 0]:
@@ -173,15 +177,19 @@ class chess:
         best_of = 5,
         EPD = None,
         SILENT = True,
-        player = 'skills/chess/data/models/test'
+        player = 'skills/chess/data/models/test',
+        tie_min = 100,
+        game_max = float('inf')
     ):
         """
-        Input: games - integer representing the amount of games to train on (default = 10) [OPTIONAL]
-               boards - integer representing the amount of boards to play at once (default = 1) [OPTIONAL]
-               best_of = integer representing the amount of games to use in a round-robin (default = 5) [OPTIONAL]
-               EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
-               SILENT - boolean used for control of displaying stats or not (default = True) [OPTIONAL]
-               players - list of player parameters (default = [{'param':'skills/chess/data/new_param.json', 'train':True}] [OPTIONAL]
+        Input: games - integer representing the amount of games to train on (Default = 10) [OPTIONAL]
+               boards - integer representing the amount of boards to play at once (Default = 1) [OPTIONAL]
+               best_of = integer representing the amount of games to use in a round-robin (Default = 5) [OPTIONAL]
+               EPD - string representing the EPD hash to load the board into (Default = None) [OPTIONAl]
+               SILENT - boolean used for control of displaying stats or not (Default = True) [OPTIONAL]
+               players - list of player parameters (Default = [{'param':'skills/chess/data/new_param.json', 'train':True}] [OPTIONAL]
+               tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
+               game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
         Description: train ai by playing multiple games of chess
         Output: None
         """
@@ -228,7 +236,9 @@ class chess:
                         train = True if t == 0 else False,
                         EPD = EPD,
                         SILENT = SILENT,
-                        players = a_players
+                        players = a_players,
+                        tie_min = tie_min,
+                        game_max = game_max
                     )
                     if t == 0:
                         if state == [1, 0, 0]:
@@ -333,3 +343,44 @@ class chess:
                             f'{n_player}/weights',
                             f'{player}/weights'
                         ) #Move model data over if none exists
+
+    def replay_game(
+        game_id,
+        game_log,
+        id_header = 'Game-ID',
+        state_header = 'state',
+        action_header = 'action'
+    ):
+        """
+        Input: game_id - string representing the ID of the game you wish to watch the replay of
+               game_log - dataframe containing the compleate game log
+               id_header - string representing the header to find the game id in the game log (Default = 'ID') [OPTIONAL]
+        Description: watch a replay of a previously played chess game
+        Output: None
+        """
+        game_data = game_log[game_log[id_header] == game_id]
+        if len(game_data) > 0:
+            chess_game = Chess()
+            plumbing = Plumbing()
+            s_headers = [h for h in game_data if state_header in h]
+            cur_move = 0
+            for i, row in game_data.iterrows():
+                g_state = row[s_headers].to_numpy()[1:].reshape((8,8)).tolist()
+                chess_game.p_move = 1 if row[f'{state_header}0'] == 0 else -1
+                chess_game.board = plumbing.decode_state(g_state)
+                cur, next = plumbing.parse_action(int(row[action_header]))
+                if chess_game.move(cur, next):
+                    chess_game.display()
+                    if chess_game.p_move > 0:
+                        print(f'w {cur.lower()}-->{next.lower()} | GAME:{game_id} MOVE:{cur_move} HASH:{chess_game.EPD_hash()}\n')
+                    else:
+                        print(f'b {cur.lower()}-->{next.lower()} | GAME:{game_id} MOVE:{cur_move} HASH:{chess_game.EPD_hash()}\n')
+                    state = chess_game.check_state(chess_game.EPD_hash())
+                    if state == '50M' or state == '3F' or state == 'PP':
+                        print(f'Game Code Found = {state}\n')
+                    cur_move += 1
+                else:
+                    print('INVALID MOVE ENCOUNTERED\n')
+                    break
+        else:
+            print(f'Error - could not find game data with the game ID {game_id}')
