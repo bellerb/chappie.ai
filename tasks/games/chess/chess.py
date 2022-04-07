@@ -443,7 +443,7 @@ class Chess:
                             return False
                         print('Unsupported answer')
                 else:
-                    return option
+                    return choice
         return False
 
     def five_fold_rule(self, hash):
