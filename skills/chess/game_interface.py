@@ -142,6 +142,7 @@ class chess:
                                 print(f'b {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
                         if a_players[i] != 'human':
                             state = chess_game.check_state(chess_game.EPD_hash())
+                            t_code = True if state != False else False
                             if ((state == '50M' or state == '3F') and len(log) > tie_min) or len(log) >= game_max:
                                 state = [0, 1, 0] #Auto tie
                             elif state == 'PP':
@@ -167,6 +168,7 @@ class chess:
             if end == True:
                 break
         del a_players
+        if t_code == True: print(f'Game Code Found = {state}\n')
         return state, game_train_data
 
     def traing_session(
@@ -179,7 +181,8 @@ class chess:
         SILENT = True,
         player = 'skills/chess/data/models/test',
         tie_min = 100,
-        game_max = float('inf')
+        game_max = float('inf'),
+        full_model = False
     ):
         """
         Input: games - integer representing the amount of games to train on (Default = 10) [OPTIONAL]
@@ -190,6 +193,7 @@ class chess:
                players - list of player parameters (Default = [{'param':'skills/chess/data/new_param.json', 'train':True}] [OPTIONAL]
                tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
                game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
+               full_model - boolean representing if the full model is being trained every exploration game or not (Default = False) [OPTIONAL]
         Description: train ai by playing multiple games of chess
         Output: None
         """
@@ -318,12 +322,18 @@ class chess:
                         os.makedirs(f'{player}/logs') #Create folder
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
                     if t == 0:
-                        if g == g_count - 1:
+                        if full_model == True:
                             s_headers = [h for h in g_log if 'state' in h]
+                            #m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log[g_log['value']!=0.0].drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
                             m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
                             del s_headers
                         else:
-                            m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player, encoder=False))
+                            if g == g_count - 1:
+                                s_headers = [h for h in g_log if 'state' in h]
+                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                                del s_headers
+                            else:
+                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player, encoder=False))
                         if os.path.exists(f'{player}/logs/training_log.csv'):
                             t_log = pd.read_csv(f'{player}/logs/training_log.csv')
                         else:
@@ -382,5 +392,6 @@ class chess:
                 else:
                     print('INVALID MOVE ENCOUNTERED\n')
                     break
+            print(chess_game.is_end())
         else:
             print(f'Error - could not find game data with the game ID {game_id}')
