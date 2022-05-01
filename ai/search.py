@@ -4,7 +4,10 @@ import random
 from copy import deepcopy
 from numpy import isnan
 from numpy.random import dirichlet
+from einops import rearrange
 #import hashlib
+
+from tools.toolbox import ToolBox
 
 class MCTS:
     """
@@ -17,6 +20,8 @@ class MCTS:
         policy,
         state,
         reward,
+        Cca = None,
+        action_space = 4096,
         user = None,
         c1 = 1.25,
         c2 = 19652,
@@ -42,6 +47,7 @@ class MCTS:
         self.tree = {} #Game tree
         #self.tree = Manager().dict()
         self.l = 0 #Last node depth
+        self.action_space = action_space #Amount of possible actions
         self.max_depth = max_depth #Max allowable depth
         self.c1 = c1 #Exploration hyper parameter 1
         self.c2 = c2 #Exploration hyper parameter 2
@@ -55,6 +61,7 @@ class MCTS:
         self.p = policy #Model used for policy
         self.s = state #Model used for state
         self.r = reward #Model used for reward
+        self.Cca = Cca #Model used for chunked cross-attention
         self.single_player = single_player #Control for if the task is single player or not
 
     class Node:
@@ -98,13 +105,13 @@ class MCTS:
         Description: return best action state using polynomial upper confidence trees
         Output: list containing pUCT values for all acitons
         """
-        p_visits = sum([self.tree[(s, b)].N for b in range(self.p.action_space)]) #Sum of all potential nodes
+        p_visits = sum([self.tree[(s, b)].N for b in range(self.action_space)]) #Sum of all potential nodes
         u_bank = {}
-        for a in range(self.p.action_space):
+        for a in range(self.action_space):
             U = self.tree[(s, a)].P * ((p_visits**(0.5))/(1+self.tree[(s, a)].N)) #First part of exploration
             if isnan(U):
                 continue
-            U *= self.c1 + (math.log((p_visits + (self.p.action_space * self.c2) + self.p.action_space) / self.c2)) #Second part of exploration
+            U *= self.c1 + (math.log((p_visits + (self.action_space * self.c2) + self.action_space) / self.c2)) #Second part of exploration
             Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
             u_bank[a] = Q_n + U
         #print(u_bank)
@@ -112,7 +119,7 @@ class MCTS:
         a_bank = [k for k,v in u_bank.items() if v == m_u]
         return random.choice(a_bank)
 
-    def search(self, s, train = False, a = None):
+    def search(self, s, train = False, e_db = None, a = None):
         """
         Input: s - tensor representing hidden state of task
                a - integer representing which action is being performed (default = None) [OPTIONAL]
@@ -130,6 +137,12 @@ class MCTS:
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
                 d_k = self.g(s, a + 1) #backbone function
+                if e_db is not None:
+                    d_k = torch.squeeze(d_k)
+                    chunks = d_k.reshape(self.Cca.l, self.Cca.m, self.Cca.d)[:self.Cca.l - 1]
+                    neighbours = ToolBox.get_kNN(chunks, e_db)
+                    d_k = self.Cca(d_k, neighbours) #chunked cross-attention
+                    d_k = d_k.reshape(1, d_k.size(0), d_k.size(1))
                 r_k = self.r(d_k) #reward function
                 s_k = self.s(d_k) #next state function
             s = s_k.reshape(s.size())
@@ -140,13 +153,13 @@ class MCTS:
         sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
         if self.tree[(s_hash, a_hash)].N == 0:
             #EXPANSION ---
-            self.expand_tree(s, s_hash, a_hash, sk_hash)
+            self.expand_tree(s, s_hash, a_hash, sk_hash, noise = False)
         elif self.l < self.max_depth:
             a_k = torch.tensor(self.pUCT(sk_hash)) #Find best action to perform @ [sk]
             a_k = a_k.reshape((1,1))
             self.l += 1
             #BACKUP ---
-            v_1  = self.search(s, a = a_k) #Go level deeper
+            v_1  = self.search(s, a = a_k, e_db = e_db) #Go level deeper
             G = self.tree[(s_hash, a_hash)].R + (self.g_d * v_1)
             self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1) #Updated value
         if self.tree[(s_hash, a_hash)].Q < self.Q_min:
@@ -176,13 +189,15 @@ class MCTS:
         #ADD NOISE TO SEARCH
         if noise == True:
             p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
+        else:
+            p = rearrange(p, 'z y x -> z (y x)')
         #MASK LEGAL MOVES ON FIRST SIM
         if mask is not None:
             for i, m in enumerate(mask):
                 p[0][i] *= m
         #UPDATE NODE VALUES
         self.tree[(s_hash, a_hash)].Q = v_k.reshape(1).item()
-        for a_k, p_a in enumerate(p.reshape(self.p.action_space)):
+        for a_k, p_a in enumerate(p.reshape(self.action_space)):
             if (sk_hash, a_k) not in self.tree:
                 self.tree[(sk_hash, a_k)] = self.Node()
             self.tree[(sk_hash, a_k)].P = p_a.item()

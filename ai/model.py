@@ -3,7 +3,43 @@ from math import log
 import torch
 from torch import nn
 
-from einops import rearrange, repeat
+from einops import rearrange, repeat, reduce
+
+class FFNN(nn.Module):
+    def __init__(
+        self,
+        input_size,
+        layer_size = 64,
+        dropout = 0.5,
+        bias = False,
+        n_dim = -1,
+        activation = True,
+        normalize = True
+    ):
+        super(FFNN, self).__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(
+                input_size,
+                layer_size,
+                bias = bias
+            ),
+            nn.Dropout(dropout)
+        )
+        if activation == True:
+            self.GELU = torch.nn.GELU()
+            self.activation = True
+        else:
+            self.activation = False
+        self.n_dim = n_dim
+        self.normalize = True if normalize == True else False
+
+    def forward(self, x):
+        z = self.linear(x)
+        if self.normalize == True:
+            z = nn.functional.normalize(z, dim=self.n_dim)
+        if self.activation == True:
+            z = self.GELU(z)
+        return z
 
 class Attention(nn.Module):
     """
@@ -86,9 +122,7 @@ class Attention(nn.Module):
                 (self.K(context), self.V(context))
             )
         #b:batches, y:y-axis, q:q x-axis, k: k x-axis
-        #print('q',q.size())
-        #print('k',k.size())
-        z = torch.einsum('b q y, b k y -> b k q', q, k) / (x.size(-1)**(0.5)) #Scaled dot-product [QK.T/sqrt(dk)]
+        z = torch.einsum('b q y, b k y -> b k q', q, k) / (x.size(-1) ** (0.5)) #Scaled dot-product [QK.T/sqrt(dk)]
 
         if mask is not None:
             mask_expanded = mask.unsqueeze(1).expand_as(z)
@@ -102,16 +136,168 @@ class Attention(nn.Module):
         z = self.output(z)
         return z
 
-class DecoderOnlyTransformer(nn.Module):
+class ChunkedCrossAttention(nn.Module):
     """
-    Decoder only transformer model
+    Chunked Cross-Attention Block
     """
     def __init__(
         self,
         input_size,
         layer_size = 64,
         heads = 1,
+        dropout = 0.5,
+        n = 12, #Sequence length
+        m = 4, #Chunk length
+        k = 2, #Amount of neighbours
+        r = 5, #Retrieval length
+        d = 2 #Embedding size
+    ):
+        """
+        Input: input_size - integer representing the size of the input data
+               layer_size - integer representing the size of the layers (default = 64) [OPTIONAL]
+               heads - integer representing the amount of heads to use (default = 1) [OPTIONAL]
+               dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
+        Description: Initailize decoder only transformer class creating the appropiate layers
+        Output: None
+        """
+        super(ChunkedCrossAttention, self).__init__()
+        self.n = n #Sequence length
+        self.m = m #Chunk length
+        self.k = k #Amount of neighbours
+        self.r = r #Retrieval length
+        self.d = d #Embedding size
+        self.l = self.n // self.m #Number of chunks
+        self.cross_attention = Attention(
+            input_size,
+            layer_size = layer_size,
+            heads = heads,
+            dropout = dropout
+        )
+
+    def forward(self, x, neighbours):
+        """
+        Input: x - tensor containing input data for decoder only transformer
+        Description: Forward pass of decoder only transformer
+        Output: None
+        """
+        attending_chunks = nn.functional.pad(x[self.m - 1:], (0, 0, 0, self.m - 1), mode='constant').reshape(self.l, self.m, self.d)
+
+        chunked_output = torch.tensor([])
+        for u in range(self.l - 1):
+            chunk = attending_chunks[u].reshape((1, self.m, self.d)) #First chunk
+            c_neighbours = neighbours[u] #Chunk neighbours
+            chunks = torch.tensor([])
+            for neighbour in c_neighbours:
+                neighbour = neighbour.reshape((1, self.r, self.d))
+                z = self.cross_attention(chunk, neighbour)
+                chunks = torch.cat([chunks, z])
+            chunks = reduce(chunks, 'k m d -> m d', 'mean')
+            chunked_output = torch.cat([chunked_output, chunks])
+
+        chunked_output = torch.cat([chunked_output, attending_chunks[-1]])
+
+        chunked_output = nn.functional.pad(chunked_output, (0, 0, self.m - 1, 0), mode='constant')[:self.n]
+
+        chunked_output[:self.m - 1] = x[:self.m - 1]
+
+        chunk = x[-1].reshape((1, 1, self.d)) #Last value in chunks
+        chunks = torch.tensor([])
+        for neighbour in neighbours[-1]:
+            neighbour = neighbour.reshape((1, self.r, self.d))
+            z = self.cross_attention(chunk, neighbour)
+            chunks = torch.cat([chunks, z])
+        chunks = reduce(chunks, 'k m d -> m d', 'mean')
+        chunked_output[- 1] = chunks
+        return chunked_output
+
+class SparseGate(nn.Module):
+    def __init__(
+        self,
+        input_size,
+        expert_count,
+        hidden_layers=64,
+        k = 2,
         dropout = 0.5
+    ):
+        super(SparseGate, self).__init__()
+        self.input = nn.Sequential(
+            nn.Linear(
+                input_size[-1],
+                hidden_layers,
+                bias = False
+            ),
+            nn.Dropout(dropout)
+        )
+        self.linear = nn.Sequential(
+            nn.Linear(
+                hidden_layers,
+                expert_count,
+                bias = False
+            ),
+            nn.Dropout(dropout)
+        )
+        self.output = nn.Sequential(
+            nn.Linear(
+                input_size[0],
+                1,
+                bias = False
+            ),
+            nn.Dropout(dropout)
+        )
+        self.softmax = torch.nn.Softmax(dim = -1)
+        self.k = k
+
+    def forward(self, x):
+        x = self.input(x)
+        x = self.linear(x)
+        x = self.output(x.T)
+        x = rearrange(x, 'y x -> (y x)')
+        topk, indices = torch.topk(x, self.k, dim = -1)
+        topk = self.softmax(topk)
+        return [(i, t) for i, t in zip(indices, topk)]
+
+class MoE(nn.Module):
+    def __init__(
+        self,
+        input_size,
+        expert_count,
+        hidden_layers=64,
+        k = 2,
+        dropout = 0.5
+    ):
+        super(MoE, self).__init__()
+        self.gate = SparseGate(
+            input_size,
+            expert_count,
+            k = k,
+            hidden_layers = hidden_layers,
+            dropout = dropout
+        )
+        self.experts = nn.ModuleList(MLP(input_size[-1]) for _ in range(expert_count))
+
+    def forward(self, x):
+        gate = self.gate(x)
+        y = torch.tensor([])
+        for i, g in gate:
+            e = g * self.experts[i](x)
+            e = rearrange(e, '(k m) d -> k m d', k=1)
+            y = torch.cat([y, e])
+        y = reduce(y, 'k m d -> m d', 'sum')
+        return y
+
+class DecoderOnlyTransformer(nn.Module):
+    """
+    Mixture of Experts Decoder only transformer model
+    """
+    def __init__(
+        self,
+        input_size,
+        layer_size = 64,
+        heads = 1,
+        dropout = 0.5,
+        moe = False,
+        expert_count = 1,
+        k = 1
     ):
         """
         Input: input_size - integer representing the size of the input data
@@ -128,6 +314,23 @@ class DecoderOnlyTransformer(nn.Module):
             heads = heads,
             dropout = dropout
         )
+        if moe == False:
+            self.linear = FFNN(
+                input_size,
+                layer_size = input_size,
+                dropout = dropout,
+                bias = False,
+                n_dim = -1
+            )
+        else:
+            self.linear = MoE(
+                input_size,
+                expert_count,
+                hidden_layers=input_size,
+                k = k,
+                dropout = dropout
+            )
+        '''
         self.linear = nn.Sequential(
             nn.Linear(
                 input_size,
@@ -137,6 +340,7 @@ class DecoderOnlyTransformer(nn.Module):
             nn.Dropout(dropout)
         )
         self.GELU = torch.nn.GELU()
+        '''
 
     def forward(self, x):
         """
@@ -145,10 +349,10 @@ class DecoderOnlyTransformer(nn.Module):
         Output: None
         """
         z = self.self_attention(x)
-        z = nn.functional.normalize(z, dim=-1)
+        z = nn.functional.normalize(z, dim = -1)
         z = self.linear(z)
-        z = nn.functional.normalize(z, dim=-1)
-        z = self.GELU(z)
+        #z = nn.functional.normalize(z, dim = -1)
+        #z = self.GELU(z)
         return z
 
 class Perceiver(nn.Module):
@@ -195,6 +399,21 @@ class Perceiver(nn.Module):
             self_heads,
             self_dropout
         )
+
+    def forward(self, x, latent):
+        """
+        Input: x - tensor containing input data
+               latent - tensor containing latent input data
+        Description: Forward pass of perceiver model
+        Output: tensor containing output of model
+        """
+        z = self.cross_attention(latent, context = x)
+        for _ in range(self.recursions):
+            for _ in range(self.transformer_blocks):
+                z = self.latent_transformer(z)
+            z = self.cross_attention(z, context = x)
+        z = self.latent_transformer(z)
+        return z
 
     def forward(self, x, latent):
         """
@@ -373,143 +592,18 @@ class Backbone(nn.Module):
         enc = self.GELU(enc)
         return enc
 
-class Value(nn.Module):
+class Head(nn.Module):
     """
-    Value head
-    """
-    def __init__(
-        self,
-        value_size,
-        latent_size,
-        value_inner = 64,
-        value_heads = 1,
-        value_dropout = 0.5,
-    ):
-        """
-        Input: value_size - integer representing the size of the value layer
-               latent_size - integer representing the size of the latent layer
-               value_inner - integer representing the size of the value model (default = 64) [OPTIONAL]
-               value_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
-               value_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
-        Description: Initailize value class creating the appropiate layers
-        Output: None
-        """
-        super(Value, self).__init__()
-        self.value = nn.Parameter(torch.randn(value_size))
-        self.ValueNetwork = Attention(
-            self.value.size(-1),
-            layer_size = value_inner,
-            context_size = latent_size[-1],
-            heads = value_heads,
-            dropout = value_dropout
-        )
-
-    def forward(self, enc):
-        """
-        Input: enc - tensor representing the auto encoded action
-        Description: Forward pass of value head
-        Output: None
-        """
-        value = repeat(self.value, 'x -> b y x', b = enc.size(0), y = 1)
-        v = self.ValueNetwork(value, enc)
-        return v
-
-class Policy(nn.Module):
-    """
-    Policy head
+    Head layer for multi task model
     """
     def __init__(
         self,
-        policy_size,
+        input_size,
         latent_size,
-        policy_inner = 64,
-        policy_heads = 1,
-        policy_dropout = 0.5
-    ):
-        """
-        Input: policy_size - integer representing the size of the policy layer
-               latent_size - integer representing the size of the latent layer
-               policy_inner - integer representing the size of the policy model (default = 64) [OPTIONAL]
-               policy_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
-               policy_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
-        Description: Initailize policy class creating the appropiate layers
-        Output: None
-        """
-        super(Policy, self).__init__()
-        self.action_space = policy_size
-        self.policy = nn.Parameter(torch.randn(policy_size))
-        self.PolicyNetwork = Attention(
-            self.policy.size(-1),
-            layer_size = policy_inner,
-            context_size = latent_size[-1],
-            heads = policy_heads,
-            dropout = policy_dropout
-        )
-        self.softmax = nn.Softmax(dim = -1)
-
-    def forward(self, enc):
-        """
-        Input: enc - tensor representing the auto encoded action
-        Description: Forward pass of policy head
-        Output: None
-        """
-        policy = repeat(self.policy, 'x -> b y x', b = enc.size(0), y = 1)
-        p = self.PolicyNetwork(policy, enc)
-        p = self.softmax(p)
-        return p
-
-class Reward(nn.Module):
-    """
-    Reward head
-    """
-    def __init__(
-        self,
-        reward_size,
-        latent_size,
-        reward_inner = 64,
-        reward_heads = 1,
-        reward_dropout = 0.5,
-    ):
-        """
-        Input: reward_size - integer representing the size of the reward layer
-               latent_size - integer representing the size of the latent layer
-               reward_inner - integer representing the size of the reward model (default = 64) [OPTIONAL]
-               reward_heads - integer representing the amount of heads in the attention block (default = 1) [OPTIONAL]
-               reward_dropout - float representing the amount of dropout to use (default = 0.5) [OPTIONAL]
-        Description: Initailize policy class creating the appropiate layers
-        Output: None
-        """
-        super(Reward, self).__init__()
-        self.reward = nn.Parameter(torch.randn(reward_size))
-        self.RewardNetwork = Attention(
-            self.reward.size(-1),
-            layer_size = reward_inner,
-            context_size = latent_size[-1],
-            heads = reward_heads,
-            dropout = reward_dropout
-        )
-
-    def forward(self, enc):
-        """
-        Input: enc - tensor representing the auto encoded action
-        Description: Forward pass of reward head
-        Output: None
-        """
-        reward = repeat(self.reward, 'x -> b y x', b = enc.size(0), y = 1)
-        r = self.RewardNetwork(reward, enc)
-        return r
-
-class NextState(nn.Module):
-    """
-    Next state head
-    """
-    def __init__(
-        self,
-        state_size,
-        latent_size,
-        state_k_inner = 64,
-        state_k_heads = 1,
-        state_k_dropout = 0.5
+        inner = 64,
+        heads = 1,
+        dropout = 0.5,
+        activation = None
     ):
         """
         Input: state_size - integer representing the size of the state layer
@@ -520,16 +614,16 @@ class NextState(nn.Module):
         Description: Initailize next state class creating the appropiate layers
         Output: None
         """
-        super(NextState, self).__init__()
-        self.state = nn.Parameter(torch.randn(state_size))
-        self.StateNetwork = Attention(
-            self.state.size(-1),
-            layer_size = state_k_inner,
+        super(Head, self).__init__()
+        self.latent = nn.Parameter(torch.randn(input_size))
+        self.cross_attention = Attention(
+            self.latent.size(-1),
+            layer_size = inner,
             context_size = latent_size[-1],
-            heads = state_k_heads,
-            dropout = state_k_dropout
+            heads = heads,
+            dropout = dropout
         )
-        self.GELU = torch.nn.GELU()
+        self.activation = activation
 
     def forward(self, enc):
         """
@@ -537,7 +631,11 @@ class NextState(nn.Module):
         Description: Forward pass of next state head
         Output: None
         """
-        state = repeat(self.state, 'y x -> b y x', b = enc.size(0))
-        s_k = self.StateNetwork(state, enc)
-        s_k = self.GELU(s_k)
+        if len(self.latent.size()) == 1:
+            latent = repeat(self.latent, 'x -> b y x', b = enc.size(0), y = 1)
+        else:
+            latent = repeat(self.latent, 'y x -> b y x', b = enc.size(0))
+        s_k = self.cross_attention(latent, enc)
+        if self.activation is not None:
+            s_k = self.activation(s_k)
         return s_k

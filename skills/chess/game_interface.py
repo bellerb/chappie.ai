@@ -9,7 +9,7 @@ from shutil import copyfile, rmtree, copytree
 from datetime import datetime
 
 #from ai.bot import Agent
-from ai.bot_V2 import Agent
+from ai.bot import Agent
 from tasks.games.chess.chess import Chess
 from skills.chess.game_plumbing import Plumbing
 from tools.toolbox import ToolBox
@@ -42,15 +42,19 @@ class chess:
         players = [
             'skills/chess/data/active_param.json',
             'human'
-        ]
+        ],
+        tie_min = 100,
+        game_max = float('inf')
     ):
         """
         Input: game_name - string representing the name of the match
                epoch - integer representing the current epoch
-               train - boolean used as training control (default = False) [OPTIONAL]
-               EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
-               SILENT - boolean used for control of displaying stats or not (default = True) [OPTIONAL]
-               players - list containing the player paramater files (default = ['skills/chess/data/active_param.json', 'human']
+               train - boolean used as training control (Default = False) [OPTIONAL]
+               EPD - string representing the EPD hash to load the board into (Default = None) [OPTIONAl]
+               SILENT - boolean used for control of displaying stats or not (Default = True) [OPTIONAL]
+               players - list containing the player paramater files (Default = ['skills/chess/data/active_param.json', 'human'] [OPTIONAL]
+               tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
+               game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
         Description: play a game of chess
         Output: tuple containing the game outcome and a dataframe containing the game log
         """
@@ -84,7 +88,12 @@ class chess:
                     if a_players[i] == 'human':
                         cur = input('What piece do you want to move?\n')
                         next = input('Where do you want to move the piece to?\n')
+                        a_map = np.zeros((8, 8, 8, 8))
+                        a_map[chess_game.y.index(cur[1])][chess_game.x.index(cur[0])][chess_game.y.index(next[1])][chess_game.x.index(next[0])] = 1
+                        a_map = a_map.flatten()
+                        b_a = np.where(a_map == 1)[0][0]
                     else:
+                        t1 = datetime.now()
                         legal = self.legal_moves(chess_game) #Filter legal moves for inital state
                         legal[legal == 0] = float('-inf')
                         probs, v, r = a_players[i].choose_action(enc_state, legal_moves = legal)
@@ -124,7 +133,7 @@ class chess:
                             log.append({
                                 **{f'state{i}':float(s) for i, s in enumerate(enc_state[0])},
                                 **{f'prob{x}':p for x, p in enumerate(probs)},
-                                **{'action':b_a}
+                                **{'action':b_a, 'time':(datetime.now() - t1).total_seconds()}
                             })
                         if SILENT == False or a_players[i] == 'human':
                             if chess_game.p_move > 0:
@@ -133,12 +142,13 @@ class chess:
                                 print(f'b {cur.lower()}-->{next.lower()} | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} HASH:{chess_game.EPD_hash()}\n')
                         if a_players[i] != 'human':
                             state = chess_game.check_state(chess_game.EPD_hash())
-                            if state == '50M' or state == '3F':
+                            t_code = True if state != False else False
+                            if ((state == '50M' or state == '3F') and len(log) > tie_min) or len(log) >= game_max:
                                 state = [0, 1, 0] #Auto tie
                             elif state == 'PP':
                                 chess_game.pawn_promotion(n_part='Q') #Auto queen
                             if state != [0, 1, 0]:
-                                state = chess_game.is_end()
+                                state = chess_game.is_end() if len(log) > tie_min else chess_game.is_end(choice=False)
                         else:
                             state = chess_game.is_end()
                             if state == [0, 0, 0]:
@@ -158,6 +168,7 @@ class chess:
             if end == True:
                 break
         del a_players
+        if t_code == True: print(f'Game Code Found = {state}\n')
         return state, game_train_data
 
     def traing_session(
@@ -168,15 +179,21 @@ class chess:
         best_of = 5,
         EPD = None,
         SILENT = True,
-        player = 'skills/chess/data/models/test'
+        player = 'skills/chess/data/models/test',
+        tie_min = 100,
+        game_max = float('inf'),
+        full_model = False
     ):
         """
-        Input: games - integer representing the amount of games to train on (default = 10) [OPTIONAL]
-               boards - integer representing the amount of boards to play at once (default = 1) [OPTIONAL]
-               best_of = integer representing the amount of games to use in a round-robin (default = 5) [OPTIONAL]
-               EPD - string representing the EPD hash to load the board into (default = None) [OPTIONAl]
-               SILENT - boolean used for control of displaying stats or not (default = True) [OPTIONAL]
-               players - list of player parameters (default = [{'param':'skills/chess/data/new_param.json', 'train':True}] [OPTIONAL]
+        Input: games - integer representing the amount of games to train on (Default = 10) [OPTIONAL]
+               boards - integer representing the amount of boards to play at once (Default = 1) [OPTIONAL]
+               best_of = integer representing the amount of games to use in a round-robin (Default = 5) [OPTIONAL]
+               EPD - string representing the EPD hash to load the board into (Default = None) [OPTIONAl]
+               SILENT - boolean used for control of displaying stats or not (Default = True) [OPTIONAL]
+               players - list of player parameters (Default = [{'param':'skills/chess/data/new_param.json', 'train':True}] [OPTIONAL]
+               tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
+               game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
+               full_model - boolean representing if the full model is being trained every exploration game or not (Default = False) [OPTIONAL]
         Description: train ai by playing multiple games of chess
         Output: None
         """
@@ -191,7 +208,7 @@ class chess:
             t_log = pd.DataFrame()
         n_player = player + '(temp)'
         if os.path.exists(n_player) == False:
-            print('CREAT NEW')
+            print('CREATE NEW')
             os.makedirs(n_player) #Create folder
             copyfile(f'{player}/parameters.json', f'{n_player}/parameters.json') #Overwrite active model with new model
             if os.path.exists(f'{n_player}/parameters.json'):
@@ -202,16 +219,17 @@ class chess:
                     )
                 else:
                     os.makedirs(f'{n_player}/weights')
-        game_results = {'white':0, 'black':0, 'tie':0}
         train_data = pd.DataFrame()
         #Begin training games
         for _ in range(LOOPS):
             for t, g_count in enumerate([T_GAMES, BEST_OF]):
                 if t == 0:
                     a_players = [f'{n_player}/parameters.json'] #Self-play
+                    game_results = {'white':0, 'black':0, 'tie':0}
                     pass
                 else:
                     a_players = [f'{player}/parameters.json', f'{n_player}/parameters.json'] #Evaluate
+                    game_results = {f'{player}/parameters.json':0, f'{n_player}/parameters.json':0, 'tie':0}
                     pass
                 for g in range(g_count):
                     #PLAY GAME
@@ -222,7 +240,9 @@ class chess:
                         train = True if t == 0 else False,
                         EPD = EPD,
                         SILENT = SILENT,
-                        players = a_players
+                        players = a_players,
+                        tie_min = tie_min,
+                        game_max = game_max
                     )
                     if t == 0:
                         if state == [1, 0, 0]:
@@ -279,13 +299,7 @@ class chess:
                         a_players.reverse()
                     #LOG TRAINING DATA
                     train_data['reward'] = [0.] * len(train_data)
-                    m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player))
-                    m_log['model'] = player
-                    t_log = t_log.append(m_log, ignore_index=True)
-                    del m_log
-                    if os.path.exists(f'{player}/logs') == False:
-                        os.makedirs(f'{player}/logs') #Create folder
-                    t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
+
                     if os.path.exists(f'{player}/logs/game_log.csv'):
                         g_log = pd.read_csv(f'{player}/logs/game_log.csv')
                     else:
@@ -300,11 +314,35 @@ class chess:
                             tie = True if state == [0, 0, 0] else False
                         )
                         train_data['ELO'] = [ELO[b_elo]] * len(train_data)
-                        print(cur_ELO, ELO, b_elo)
+                        #print(cur_ELO, ELO, b_elo)
                     train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = g_log.append(train_data, ignore_index=True)
+                    if os.path.exists(f'{player}/logs') == False:
+                        os.makedirs(f'{player}/logs') #Create folder
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
+                    if t == 0:
+                        if full_model == True:
+                            s_headers = [h for h in g_log if 'state' in h]
+                            #m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log[g_log['value']!=0.0].drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                            m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                            del s_headers
+                        else:
+                            if g == g_count - 1:
+                                s_headers = [h for h in g_log if 'state' in h]
+                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                                del s_headers
+                            else:
+                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player, encoder=False))
+                        if os.path.exists(f'{player}/logs/training_log.csv'):
+                            t_log = pd.read_csv(f'{player}/logs/training_log.csv')
+                        else:
+                            t_log = pd.DataFrame()
+                        m_log['model'] = player
+                        t_log = t_log.append(m_log, ignore_index=True)
+                        del m_log
+                        t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
+                        del t_log
                     #GARBEGE CLEAN UP
                     del g_log
                     train_data = pd.DataFrame()
@@ -315,4 +353,45 @@ class chess:
                             f'{n_player}/weights',
                             f'{player}/weights'
                         ) #Move model data over if none exists
-        rmtree(n_player) #Remove temporary model folder
+
+    def replay_game(
+        game_id,
+        game_log,
+        id_header = 'Game-ID',
+        state_header = 'state',
+        action_header = 'action'
+    ):
+        """
+        Input: game_id - string representing the ID of the game you wish to watch the replay of
+               game_log - dataframe containing the compleate game log
+               id_header - string representing the header to find the game id in the game log (Default = 'ID') [OPTIONAL]
+        Description: watch a replay of a previously played chess game
+        Output: None
+        """
+        game_data = game_log[game_log[id_header] == game_id]
+        if len(game_data) > 0:
+            chess_game = Chess()
+            plumbing = Plumbing()
+            s_headers = [h for h in game_data if state_header in h]
+            cur_move = 0
+            for i, row in game_data.iterrows():
+                g_state = row[s_headers].to_numpy()[1:].reshape((8,8)).tolist()
+                chess_game.p_move = 1 if row[f'{state_header}0'] == 0 else -1
+                chess_game.board = plumbing.decode_state(g_state)
+                cur, next = plumbing.parse_action(int(row[action_header]))
+                if chess_game.move(cur, next):
+                    chess_game.display()
+                    if chess_game.p_move > 0:
+                        print(f'w {cur.lower()}-->{next.lower()} | GAME:{game_id} MOVE:{cur_move} HASH:{chess_game.EPD_hash()}\n')
+                    else:
+                        print(f'b {cur.lower()}-->{next.lower()} | GAME:{game_id} MOVE:{cur_move} HASH:{chess_game.EPD_hash()}\n')
+                    state = chess_game.check_state(chess_game.EPD_hash())
+                    if state == '50M' or state == '3F' or state == 'PP':
+                        print(f'Game Code Found = {state}\n')
+                    cur_move += 1
+                else:
+                    print('INVALID MOVE ENCOUNTERED\n')
+                    break
+            print(chess_game.is_end())
+        else:
+            print(f'Error - could not find game data with the game ID {game_id}')
