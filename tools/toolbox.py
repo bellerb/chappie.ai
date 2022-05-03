@@ -28,8 +28,12 @@ class ToolBox:
                 hold = torch.tensor(row[headers].values).to(torch.long).reshape(1, len(headers))
                 hold = representation(hold)
                 hold = backbone(hold, torch.zeros(1, 1).to(torch.long))
-                e_db.append(hold.tolist())
+                e_db.append({
+                    'encoding':hold.tolist(),
+                    'state':row[headers].tolist()
+                })
             del hold
+            del t_db
             e_db = pd.DataFrame(e_db)
         else:
             e_db = None
@@ -44,8 +48,8 @@ class ToolBox:
         """
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
-            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x[0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(), axis=1)
-            kNN = torch.tensor([e_db.nsmallest(k, ['L2'])[0].tolist()])
+            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x['encoding'][0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(), axis=1)
+            kNN = torch.tensor([e_db.nsmallest(k, ['L2'])['encoding'].tolist()])
             neighbours = torch.cat([neighbours, kNN])
         return neighbours
 

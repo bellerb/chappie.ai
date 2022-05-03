@@ -137,12 +137,14 @@ class MCTS:
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
                 d_k = self.g(s, a + 1) #backbone function
+                '''
                 if e_db is not None:
                     d_k = torch.squeeze(d_k)
                     chunks = d_k.reshape(self.Cca.l, self.Cca.m, self.Cca.d)[:self.Cca.l - 1]
                     neighbours = ToolBox.get_kNN(chunks, e_db)
                     d_k = self.Cca(d_k, neighbours) #chunked cross-attention
                     d_k = d_k.reshape(1, d_k.size(0), d_k.size(1))
+                '''
                 r_k = self.r(d_k) #reward function
                 s_k = self.s(d_k) #next state function
             s = s_k.reshape(s.size())

@@ -163,7 +163,7 @@ class Agent:
             self.E_DB = ToolBox.build_embedding_db(
                 representation,
                 backbone,
-                f_name = ('/'.join(s for s in param_name.split('/')[:-1]) + '/logs/game_log.csv').replace('(temp)','')
+                f_name = f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/game_log.csv".replace('(temp)','')
             )
         else:
             self.E_DB = None
@@ -187,7 +187,10 @@ class Agent:
                     self.m_weights['cca']['model'].m,
                     self.m_weights['cca']['model'].d
                 )[:self.m_weights['cca']['model'].l - 1]
-                neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                neighbours = ToolBox.get_kNN(
+                    chunks,
+                    self.E_DB[~self.E_DB['state'].isin(state.float().tolist())]
+                )
                 d = self.m_weights['cca']['model'](d, neighbours) #chunked cross-attention
                 d = d.reshape(1, d.size(0), d.size(1))
         s_hash = self.MCTS.state_hash(d)
@@ -217,9 +220,12 @@ class Agent:
         self.MCTS.tree = {}
         return (probs, value, reward)
 
-    def train(self, data, folder = None, encoder = True):
+    def train(self, data, folder = None, encoder = True, full_count = 1):
         """
         Input: data - dataframe containing training data
+               folder -  string representing the folder to save the new weights in (Default = None) [OPTIONAL]
+               encoder - boolean representing if you want to retrain the encoder models or not (Default = True) [OPTIONAL]
+               full_count - integer representing the amount of epochs to do full model training for (Default = 1) [OPTIONAL]
         Description: Training of the models
         Output: dataframe containing the training log
         """
@@ -312,16 +318,16 @@ class Agent:
         for epoch in range(self.training_settings['epoch']):
             t_steps = 0 #Current training step
             self.total_loss = {'value loss':0., 'policy loss':0., 'state loss':0, 'reward loss':0.}
-            if self.E_DB is not None:
-                self.total_loss['Cca loss'] = 0.
-            if encoder == True and epoch == 0:
+            if encoder == True and epoch <= full_count - 1:
                 self.total_loss['hidden loss'] = 0.
                 self.total_loss['backbone loss'] = 0.
-            if epoch == 1:
+                if self.E_DB is not None:
+                    self.total_loss['Cca loss'] = 0.
+            if encoder == True and epoch > full_count - 1:
                 data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
             for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
                 state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
-                if epoch == 0 and encoder == True:
+                if epoch <= full_count - 1 and encoder == True:
                     #Train trunk of model
                     self.train_representation_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
                     self.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
@@ -335,7 +341,7 @@ class Agent:
                 self.update_reward_layer(r, r_targets)
                 t_steps += 1
             #Learning rate decay
-            if epoch == 0 and encoder == True:
+            if epoch <= full_count - 1 and encoder == True:
                 self.h_scheduler.step()
                 self.g_scheduler.step()
                 if self.E_DB is not None:
