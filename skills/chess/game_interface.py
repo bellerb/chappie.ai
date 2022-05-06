@@ -18,6 +18,9 @@ class chess:
     """
     Main interface for the AI to play chess
     """
+    def __init__(self):
+        self.tools = ToolBox()
+
     def legal_moves(self, chess_game):
         """
         Input: chess_game - object containing the current chess game
@@ -290,7 +293,7 @@ class chess:
                             os.makedirs(f'{player}/weights') #Create folder
                         if len(os.listdir(f'{player}/weights')) == 0 or len(winners) == 1 and winners[0] == n_player:
                             print('OVERWRITE')
-                            ToolBox.overwrite_model(
+                            self.tools.overwrite_model(
                                 n_player,
                                 player
                             )
@@ -308,7 +311,7 @@ class chess:
                         train_data['ELO'] = [''] * len(train_data)
                     else:
                         cur_ELO = g_log['ELO'].dropna().iloc[-1] if 'ELO' in g_log and len(g_log['ELO'].dropna()) > 0 else 0
-                        ELO = ToolBox.update_ELO(
+                        ELO = self.tools.update_ELO(
                             cur_ELO, #ELO_p1,
                             cur_ELO,  #ELO_p2
                             tie = True if state == [0, 0, 0] else False
@@ -349,7 +352,7 @@ class chess:
                     if os.path.exists(f'{player}/weights') == False:
                         os.makedirs(f'{player}/weights') #Create folder
                     if len(os.listdir(f'{player}/weights')) == 0:
-                        ToolBox.overwrite_model(
+                        self.tools.overwrite_model(
                             f'{n_player}/weights',
                             f'{player}/weights'
                         ) #Move model data over if none exists

@@ -1,15 +1,14 @@
 import os
 import time
 import json
-import torch
 import random
-import numpy as np
-import pandas as pd
-
+from datetime import datetime
 from tqdm import tqdm
 
+import torch
+import numpy as np
+import pandas as pd
 from einops import rearrange
-from datetime import datetime
 
 from ai.search import MCTS
 from tools.toolbox import ToolBox
@@ -158,9 +157,9 @@ class Agent:
         self.workers = m_param['search']['workers'] #Amount of threads in search
         self.training_settings =  m_param['training'] #Training settings
         #self.single_player = m_param['search']['single_player']
-
-        if p_model['retro'] == True:
-            self.E_DB = ToolBox.build_embedding_db(
+        self.tools = ToolBox()
+        if p_model['retro'] is True:
+            self.E_DB = self.tools.build_embedding_db(
                 representation,
                 backbone,
                 f_name = f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/game_log.csv".replace('(temp)','')
@@ -187,7 +186,7 @@ class Agent:
                     self.m_weights['cca']['model'].m,
                     self.m_weights['cca']['model'].d
                 )[:self.m_weights['cca']['model'].l - 1]
-                neighbours = ToolBox.get_kNN(
+                neighbours = self.tools.get_kNN(
                     chunks,
                     self.E_DB[~self.E_DB['state'].isin(state.float().tolist())]
                 )
@@ -201,8 +200,8 @@ class Agent:
         #Run simulations
         for _ in tqdm(range(self.sim_amt),desc='MCTS'):
             self.MCTS.l = 0
-            search = ToolBox.multi_thread(
-                [{'name':f'search {x}', 'func':self.MCTS.search, 'args':(d, self.train_control, self.E_DB)} for x in range(self.workers)],
+            search = self.tools.multi_thread(
+                [{'name':f'search {x}', 'func':self.MCTS.search, 'args':(d, self.E_DB)} for x in range(self.workers)],
                 workers = self.workers
             )
         #Find best move
@@ -270,30 +269,70 @@ class Agent:
         for epoch in range(self.training_settings['epoch']):
             t_steps = 0 #Current training step
             self.total_loss = {'value loss':0., 'policy loss':0., 'state loss':0, 'reward loss':0.}
-            if encoder == True and epoch <= full_count - 1:
+            if encoder is True and epoch <= full_count - 1:
                 self.total_loss['hidden loss'] = 0.
                 self.total_loss['backbone loss'] = 0.
                 if self.E_DB is not None:
                     self.total_loss['Cca loss'] = 0.
-            if encoder == True and epoch > full_count - 1:
+            if encoder is True and epoch > full_count - 1:
                 data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
-            for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
-                state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
-                if epoch <= full_count - 1 and encoder == True:
-                    #Train trunk of model
-                    self.train_representation_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                    self.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                    if self.E_DB is not None:
-                        self.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                #Train heads of model
-                v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
-                self.update_value_layer(v, v_targets)
-                self.update_policy_layer(p, p_targets)
-                self.update_next_state_layer(s, s_h)
-                self.update_reward_layer(r, r_targets)
-                t_steps += 1
+            with tqdm(total=int(len(data)/self.training_settings['bsz']) + 1, desc='Training Batch') as pbar:
+                for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
+                    state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
+                    if epoch <= full_count - 1 and encoder is True:
+                        #Train trunk of model
+                        if self.E_DB is not None:
+                            self.tools.multi_thread(
+                                [
+                                    {'name':'representation', 'func':self.train_representation_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)},
+                                    {'name':'cca', 'func':self.train_cca_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)},
+                                    {'name':'backbone', 'func':self.train_backbone_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)}
+                                ],
+                                workers = 2
+                            )
+                        else:
+                            self.tools.multi_thread(
+                                [
+                                    {'name':'representation', 'func':self.train_representation_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)},
+                                    {'name':'backbone', 'func':self.train_backbone_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)}
+                                ],
+                                workers = 2
+                            )
+                        '''
+                        #Train trunk of model
+                        self.train_representation_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                        #print('rep')
+                        self.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                        #print('back')
+                        if self.E_DB is not None:
+                            self.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                            #print('cca')
+                        '''
+                    #Train heads of model
+                    v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
+                    self.tools.multi_thread(
+                        [
+                            {'name':'value', 'func':self.update_value_layer, 'args':(v, v_targets)},
+                            {'name':'policy', 'func':self.update_policy_layer, 'args':(p, p_targets)},
+                            {'name':'state', 'func':self.update_next_state_layer, 'args':(s, s_h)},
+                            {'name':'reward', 'func':self.update_reward_layer, 'args':(r, r_targets)}
+                        ],
+                        workers = 2
+                    )
+                    '''
+                    self.update_value_layer(v, v_targets)
+                    #print('val')
+                    self.update_policy_layer(p, p_targets)
+                    #print('pol')
+                    self.update_next_state_layer(s, s_h)
+                    #print('state')
+                    self.update_reward_layer(r, r_targets)
+                    #print('reward')
+                    '''
+                    t_steps += 1
+                    pbar.update(1)
             #Learning rate decay
-            if epoch <= full_count - 1 and encoder == True:
+            if epoch <= full_count - 1 and encoder is True:
                 self.h_scheduler.step()
                 self.g_scheduler.step()
                 if self.E_DB is not None:
@@ -313,7 +352,7 @@ class Agent:
                 **{k:(v / t_steps) for k, v in self.total_loss.items()}
             })
         #Updated new model
-        if folder is not None and os.path.exists(f'{folder}/weights') == False:
+        if folder is not None and os.path.exists(f'{folder}/weights') is False:
             os.makedirs(f'{folder}/weights') #Create folder
         for m in self.m_weights:
             torch.save({
@@ -340,7 +379,7 @@ class Agent:
                     self.m_weights['cca']['model'].m,
                     self.m_weights['cca']['model'].d
                 )[:self.m_weights['cca']['model'].l - 1]
-                neighbours = ToolBox.get_kNN(chunks, self.E_DB)
+                neighbours = self.tools.get_kNN(chunks, self.E_DB)
                 c = self.m_weights['cca']['model'](row, neighbours) #chunked cross-attention
                 c = c.reshape(1, c.size(0), c.size(1))
                 d_hold = torch.cat([d_hold, c])
@@ -372,7 +411,7 @@ class Agent:
         v_loss = self.mse(v, v_targets) #Apply loss function to results
         p_loss = self.bce(p, p_targets) #Apply loss function to results
         r_loss = self.mse(r, r_targets) #Apply loss function to results
-        s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
+        #s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
         h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
         #Update hidden layer weights
         self.h_optimizer.zero_grad()
@@ -554,7 +593,7 @@ class Agent:
         #s_1[f'{s_h}0'] = np.where(s_1[f'{s_h}0'] == 0., 1., 0.)
         if True in s_1.iloc[-1].isna().tolist():
             s_1.iloc[-1] = s.iloc[-1]
-            #if self.single_player == False:
+            #if self.single_player is False:
                 #s_1[f'{s_h}0'].iloc[-1] = 0 if s_1[f'{s_h}0'].iloc[-1] == 1 else 1
 
         p_1 = source[p_headers].shift(periods = -1, axis = 0).iloc[x:x+y]

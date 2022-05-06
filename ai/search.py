@@ -1,7 +1,8 @@
 import math
-import torch
 import random
 from copy import deepcopy
+
+import torch
 from numpy import isnan
 from numpy.random import dirichlet
 from einops import rearrange
@@ -22,7 +23,6 @@ class MCTS:
         reward,
         Cca = None,
         action_space = 4096,
-        user = None,
         c1 = 1.25,
         c2 = 19652,
         d_a = .3,
@@ -34,7 +34,6 @@ class MCTS:
         """
         Input: prediction - NN used to predict p, v values
                backbone - NN used to predict the next states hidden values and the reward
-               user - integer representing which user the agent is (default = None) [OPTIONAL]
                c1 - float representing a search hyperparameter (default = 1.25) [OPTIONAL]
                c2 - float representing a search hyperparameter (default = 19652) [OPTIONAL]
                d_a = float representing the dirichlet alpha you wish to use (default = 0.3) [OPTIONAL]
@@ -119,11 +118,10 @@ class MCTS:
         a_bank = [k for k,v in u_bank.items() if v == m_u]
         return random.choice(a_bank)
 
-    def search(self, s, train = False, e_db = None, a = None):
+    def search(self, s, e_db = None, a = None):
         """
         Input: s - tensor representing hidden state of task
                a - integer representing which action is being performed (default = None) [OPTIONAL]
-               train - boolean representing if search is being used in training mode (default = False) [OPTIONAL]
         Description: Search the task action tree using upper confidence value
         Output: predicted value
         """
@@ -137,14 +135,6 @@ class MCTS:
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
                 d_k = self.g(s, a + 1) #backbone function
-                '''
-                if e_db is not None:
-                    d_k = torch.squeeze(d_k)
-                    chunks = d_k.reshape(self.Cca.l, self.Cca.m, self.Cca.d)[:self.Cca.l - 1]
-                    neighbours = ToolBox.get_kNN(chunks, e_db)
-                    d_k = self.Cca(d_k, neighbours) #chunked cross-attention
-                    d_k = d_k.reshape(1, d_k.size(0), d_k.size(1))
-                '''
                 r_k = self.r(d_k) #reward function
                 s_k = self.s(d_k) #next state function
             s = s_k.reshape(s.size())
@@ -170,7 +160,7 @@ class MCTS:
             self.Q_max = self.tree[(s_hash, a_hash)].Q
 
         self.tree[(s_hash, a_hash)].N += 1
-        return self.tree[(s_hash, a_hash)].Q if self.single_player == True else -self.tree[(s_hash, a_hash)].Q
+        return self.tree[(s_hash, a_hash)].Q if self.single_player is True else -self.tree[(s_hash, a_hash)].Q
 
     def expand_tree(self, s, s_hash, a_hash, sk_hash = None, mask = None, noise = False):
         """
@@ -189,7 +179,7 @@ class MCTS:
             v_k = self.v(s) #value function
             p = self.p(s) #policy function
         #ADD NOISE TO SEARCH
-        if noise == True:
+        if noise is True:
             p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
         else:
             p = rearrange(p, 'z y x -> z (y x)')

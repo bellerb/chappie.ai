@@ -6,6 +6,9 @@ from torch import nn
 from einops import rearrange, repeat, reduce
 
 class FFNN(nn.Module):
+    """
+    Simple feed forward neural network
+    """
     def __init__(
         self,
         input_size,
@@ -25,19 +28,19 @@ class FFNN(nn.Module):
             ),
             nn.Dropout(dropout)
         )
-        if activation == True:
+        if activation is True:
             self.GELU = torch.nn.GELU()
             self.activation = True
         else:
             self.activation = False
         self.n_dim = n_dim
-        self.normalize = True if normalize == True else False
+        self.normalize = True if normalize is True else False
 
     def forward(self, x):
         z = self.linear(x)
-        if self.normalize == True:
+        if self.normalize is True:
             z = nn.functional.normalize(z, dim=self.n_dim)
-        if self.activation == True:
+        if self.activation is True:
             z = self.GELU(z)
         return z
 
@@ -211,6 +214,9 @@ class ChunkedCrossAttention(nn.Module):
         return chunked_output
 
 class SparseGate(nn.Module):
+    """
+    Sparse gating mechanism usefull for routing
+    """
     def __init__(
         self,
         input_size,
@@ -254,9 +260,12 @@ class SparseGate(nn.Module):
         x = rearrange(x, 'y x -> (y x)')
         topk, indices = torch.topk(x, self.k, dim = -1)
         topk = self.softmax(topk)
-        return [(i, t) for i, t in zip(indices, topk)]
+        return list(zip(indices, topk)) #[(i, t) for i, t in zip(indices, topk)]
 
 class MoE(nn.Module):
+    """
+    Miture of experts layer
+    """
     def __init__(
         self,
         input_size,
@@ -273,7 +282,7 @@ class MoE(nn.Module):
             hidden_layers = hidden_layers,
             dropout = dropout
         )
-        self.experts = nn.ModuleList(MLP(input_size[-1]) for _ in range(expert_count))
+        self.experts = nn.ModuleList(FFNN(input_size[-1]) for _ in range(expert_count))
 
     def forward(self, x):
         gate = self.gate(x)
@@ -314,7 +323,7 @@ class DecoderOnlyTransformer(nn.Module):
             heads = heads,
             dropout = dropout
         )
-        if moe == False:
+        if moe is False:
             self.linear = FFNN(
                 input_size,
                 layer_size = input_size,

@@ -1,13 +1,20 @@
-import torch
 from time import sleep
-import pandas as pd
 from os import listdir
-from os.path import exists, isfile
+
+import torch
+import pandas as pd
+from tqdm import tqdm
+
 from shutil import copyfile
+from os.path import exists, isfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 class ToolBox:
-    def build_embedding_db(representation, backbone, f_name = None, s_header = 'state'):
+    """
+    The ToolBox is a class containing miscellaneous functions used throughout the agent
+    """
+
+    def build_embedding_db(self, representation, backbone, f_name = None, s_header = 'state'):
         """
         Input: representation - model used to create game state representations
                backbone - model used as the backbone of our multi task model
@@ -22,16 +29,18 @@ class ToolBox:
         else:
             t_db = None
         if t_db is not None:
-            headers = [h for h in t_db]
+            headers = list(t_db.columns)
             e_db = []
-            for i, row in t_db.iterrows():
-                hold = torch.tensor(row[headers].values).to(torch.long).reshape(1, len(headers))
-                hold = representation(hold)
-                hold = backbone(hold, torch.zeros(1, 1).to(torch.long))
-                e_db.append({
-                    'encoding':hold.tolist(),
-                    'state':row[headers].tolist()
-                })
+            with tqdm(total=len(t_db), desc='Embedding DB') as pbar:
+                for i, row in t_db.iterrows():
+                    hold = torch.tensor(row[headers].values).to(torch.long).reshape(1, len(headers))
+                    hold = representation(hold)
+                    hold = backbone(hold, torch.zeros(1, 1).to(torch.long))
+                    e_db.append({
+                        'encoding':hold.tolist(),
+                        'state':row[headers].tolist()
+                    })
+                    pbar.update(1)
             del hold
             del t_db
             e_db = pd.DataFrame(e_db)
@@ -39,7 +48,7 @@ class ToolBox:
             e_db = None
         return e_db
 
-    def get_kNN(chunks, e_db, k = 2):
+    def get_kNN(self, chunks, e_db, k = 2):
         """
         Input: chunks - tensor containing initial data
                e_db - dataframe containing embeddings
@@ -48,12 +57,15 @@ class ToolBox:
         """
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
-            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x['encoding'][0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(), axis=1)
+            e_db['L2'] = e_db.apply(
+                lambda x:torch.linalg.norm(chunk - torch.tensor(x['encoding'][0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(),
+                axis=1
+            )
             kNN = torch.tensor([e_db.nsmallest(k, ['L2'])['encoding'].tolist()])
             neighbours = torch.cat([neighbours, kNN])
         return neighbours
 
-    def multi_process(func, workers = None):
+    def multi_process(self, func, workers = None):
         """
         Input: func - list of dicitonary's containing the functions you want to run in parallel
         Description: run multiple funcitons in parallel
@@ -71,7 +83,7 @@ class ToolBox:
                 data[future_func[future]] = future.result()
         return data
 
-    def multi_thread(func, workers = None):
+    def multi_thread(self, func, workers = None):
         """
         Input: func - list of dicitonary's containing the functions you want to run in parallel
         Description: run multiple funcitons in parallel
@@ -89,7 +101,7 @@ class ToolBox:
                 data[future_func[future]] = future.result()
         return data
 
-    def overwrite_model(p1, p2):
+    def overwrite_model(self, p1, p2):
         """
         Input: p1 - string representing player 1 paramater file
                p2 - string representing player 2 paramater file
@@ -97,7 +109,7 @@ class ToolBox:
         Output: None
         """
         if exists(p1):
-            if exists(p2) == False:
+            if exists(p2) is False:
                 os.makedirs(p2) #Create folder
             for i, m in enumerate(listdir(p1)):
                 copyfile(
@@ -105,7 +117,7 @@ class ToolBox:
                     f"{p2}/{m}"
                 ) #Overwrite active model with new model
 
-    def give_options(o_bank):
+    def give_options(self, o_bank):
         """
         Input: o_bank - list of strings representing options
         Description: get user input from option bank
@@ -131,7 +143,7 @@ class ToolBox:
                 break
         return choice
 
-    def update_ELO(p1, p2, k = 32, tie = False):
+    def update_ELO(self, p1, p2, k = 32, tie = False):
         """
         Input: p1 - float representing the winning players current ELO
                p2 - float representing the loosing players current ELO
@@ -146,7 +158,7 @@ class ToolBox:
         E_p1 = R_p1 / (R_p1 + R_p2)
         E_p2 = R_p2 / (R_p2 + R_p1)
 
-        if tie == False:
+        if tie is False:
             S_p1 = 1
             S_p2 = 0
         else:

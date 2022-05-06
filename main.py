@@ -18,6 +18,7 @@ if __name__ == '__main__':
     )
     quit()
     '''
+    tools = ToolBox()
     print(
 '''
 -------------------------------------------------
@@ -28,7 +29,7 @@ if __name__ == '__main__':
     o_bank = [
         'Chess (c)'
     ]
-    task = ToolBox.give_options(o_bank)
+    task = tools.give_options(o_bank)
     if task == 0:
         print(
 '''
@@ -43,7 +44,7 @@ if __name__ == '__main__':
             'Train    (t)',
             'Evaluate (e)'
         ]
-        task = ToolBox.give_options(c_tasks)
+        task = tools.give_options(c_tasks)
         i = 0
         model_list = []
         for m in os.listdir(f'skills/chess/data/models'):
@@ -61,7 +62,7 @@ if __name__ == '__main__':
             )
             players = ['human']
             col_choice = ['White (w)','Black (b)']
-            p_col = ToolBox.give_options(col_choice)
+            p_col = tools.give_options(col_choice)
             print(
 '''
 -------------------------------------------------
@@ -69,7 +70,7 @@ Please select a bot to play?
 -------------------------------------------------
 '''
             )
-            m_choice = ToolBox.give_options(model_list)
+            m_choice = tools.give_options(model_list)
             if p_col == 0:
                 players.append(f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}/parameters.json')
             else:
@@ -99,18 +100,18 @@ Please select which bot you would like to train?
 -------------------------------------------------
 '''
             )
-            m_choice = ToolBox.give_options(model_list)
+            m_choice = tools.give_options(model_list)
             player = f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}'
             chess = chess()
             chess.traing_session(
                 loops = 1,
-                games = 20,
+                games = 1,
                 boards = 1,
                 best_of = 3,
                 player = player,
                 SILENT = False,
                 tie_min = float('inf'),
-                full_model = False,
+                full_model = True,
                 #game_max = 200
             )
         elif task == 2:
@@ -122,7 +123,7 @@ What kind of evaluation would you like to do?
 -------------------------------------------------
 '''
             )
-            e_type = ToolBox.give_options(['Single Game       (s)', 'Tourmanent Style  (t)'])
+            e_type = tools.give_options(['Single Game       (s)', 'Tourmanent Style  (t)'])
             if e_type == 0:
                 players = []
                 print(
@@ -133,7 +134,7 @@ Please select a bot to play white?
 -------------------------------------------------
 '''
                 )
-                m_choice = ToolBox.give_options(model_list)
+                m_choice = tools.give_options(model_list)
                 players.append(f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}/parameters.json')
                 print(
 '''
@@ -142,7 +143,7 @@ Please select a bot to play black?
 -------------------------------------------------
 '''
                 )
-                m_choice = ToolBox.give_options(model_list)
+                m_choice = tools.give_options(model_list)
                 players.append(f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}/parameters.json')
                 chess = chess()
                 print(
