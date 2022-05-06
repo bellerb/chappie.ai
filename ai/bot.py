@@ -220,6 +220,29 @@ class Agent:
         self.MCTS.tree = {}
         return (probs, value, reward)
 
+    def init_model_4_training(self, optimizer, scheduler, model_name, step_header, gamma_header, m_header='model', lr_header='lr'):
+        """
+        Input: optimizer - string representing the name of the optimizer variable for the model
+               scheduler - string representing the name of the scheduler variable for the model
+               model_name - string representing the name of the model
+               step_header - string representing the header for the step setting
+               gamma_header - string representing the header of the gamma decay setting
+               m_header - string representing the model header (Default = 'model') [OPTIONAL]
+               lr_header - string representing the learning rate header (Default ='lr') [OPTIONAL]
+        Description: initalizes a model for training purposes
+        Output: None
+        """
+        self.__dict__[optimizer] = torch.optim.Adam(
+            self.m_weights[model_name][m_header].parameters(),
+            lr=self.training_settings[lr_header]
+        )
+        self.__dict__[scheduler] = torch.optim.lr_scheduler.StepLR(
+            self.__dict__[optimizer],
+            self.training_settings[step_header],
+            gamma=self.training_settings[gamma_header]
+        )
+        self.m_weights[model_name][m_header].train()
+
     def train(self, data, folder = None, encoder = True, full_count = 1):
         """
         Input: data - dataframe containing training data
@@ -232,86 +255,15 @@ class Agent:
         #Training loss functions
         self.mse = torch.nn.MSELoss() #Mean squared error loss
         self.bce = torch.nn.BCELoss() #Binary cross entropy loss
-        #Hidden layer settings
-        self.h_optimizer = torch.optim.Adam(
-            self.m_weights['representation']['model'].parameters(),
-            lr=self.training_settings['lr']
-        )
-        self.h_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.h_optimizer,
-            self.training_settings['h_step'],
-            gamma=self.training_settings['h_gamma']
-        )
-        #Backbone layer settings
-        self.g_optimizer = torch.optim.Adam(
-            self.m_weights['backbone']['model'].parameters(),
-            lr=self.training_settings['lr']
-        )
-        self.g_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.g_optimizer,
-            self.training_settings['b_step'],
-            gamma=self.training_settings['b_gamma']
-        )
-        #Chunked cross-attention layer settings
-        if self.E_DB is not None:
-            self.cca_optimizer = torch.optim.Adam(
-                self.m_weights['cca']['model'].parameters(),
-                lr=self.training_settings['lr']
-            )
-            self.cca_scheduler = torch.optim.lr_scheduler.StepLR(
-                self.cca_optimizer,
-                self.training_settings['cca_step'],
-                gamma=self.training_settings['cca_gamma']
-            )
-        #Value head settings
-        self.v_optimizer = torch.optim.Adam(
-            self.m_weights['value']['model'].parameters(),
-            lr=self.training_settings['lr']
-        )
-        self.v_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.v_optimizer,
-            self.training_settings['v_step'],
-            gamma=self.training_settings['v_gamma']
-        )
-        #Policy head settings
-        self.p_optimizer = torch.optim.Adam(
-            self.m_weights['policy']['model'].parameters(),
-            lr=self.training_settings['lr']
-        )
-        self.p_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.p_optimizer,
-            self.training_settings['p_step'],
-            gamma=self.training_settings['p_gamma']
-        )
-        #Next state representation head settings
-        self.s_optimizer = torch.optim.Adam(
-            self.m_weights['state']['model'].parameters(),
-            lr=self.training_settings['lr']
-        )
-        self.s_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.s_optimizer,
-            self.training_settings['s_step'],
-            gamma=self.training_settings['s_gamma']
-        )
-        #Reward settings
-        self.r_optimizer = torch.optim.Adam(
-            self.m_weights['reward']['model'].parameters(),
-            lr=self.training_settings['lr']
-        )
-        self.r_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.r_optimizer,
-            self.training_settings['r_step'],
-            gamma=self.training_settings['r_gamma']
-        )
         #Load model weights
-        self.m_weights['representation']['model'].train() #Turn on the train mode
-        self.m_weights['backbone']['model'].train() #Turn on the train mode
+        self.init_model_4_training('h_optimizer', 'h_scheduler', 'representation', 'h_step', 'h_gamma') #Hidden layer settings
+        self.init_model_4_training('g_optimizer', 'g_scheduler', 'backbone', 'b_step', 'b_gamma') #Backbone layer settings
         if self.E_DB is not None:
-            self.m_weights['cca']['model'].train() #Turn on the train mode
-        self.m_weights['value']['model'].train() #Turn on the train mode
-        self.m_weights['policy']['model'].train() #Turn on the train mode
-        self.m_weights['state']['model'].train() #Turn on the train mode
-        self.m_weights['reward']['model'].train() #Turn on the train mode
+            self.init_model_4_training('cca_optimizer', 'cca_scheduler', 'cca', 'cca_step', 'cca_gamma') #Chunked cross-attention layer settings
+        self.init_model_4_training('v_optimizer', 'v_scheduler', 'value', 'v_step', 'v_gamma') #Value head settings
+        self.init_model_4_training('p_optimizer', 'p_scheduler', 'policy', 'p_step', 'p_gamma') #Policy head settings
+        self.init_model_4_training('s_optimizer', 's_scheduler', 'state', 's_step', 's_gamma') #Next state representation head settings
+        self.init_model_4_training('r_optimizer', 'r_scheduler', 'reward', 'r_step', 'r_gamma') #Reward settings
         #Start training model
         t_log = [] #Training log
         start_time = time.time() #Get time of starting process
@@ -465,29 +417,6 @@ class Agent:
             self.training_settings['b_max_norm']
         )
         self.g_optimizer.step()
-
-        '''
-
-        v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
-        v_loss = self.mse(v, v_targets) #Apply loss function to results
-        p_loss = self.bce(p, p_targets) #Apply loss function to results
-        r_loss = self.mse(r, r_targets) #Apply loss function to results
-        s_loss = self.mse(s, s_h) #Apply loss function to results
-        d_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
-        #Update backbone layer weights
-        self.total_loss['backbone loss'] += d_loss.item()
-        self.g_optimizer.zero_grad()
-        d_loss.backward(
-            retain_graph = True,
-            inputs = list(self.m_weights['backbone']['model'].parameters())
-        )
-        torch.nn.utils.clip_grad_norm_(
-            self.m_weights['backbone']['model'].parameters(),
-            self.training_settings['b_max_norm']
-        )
-        self.g_optimizer.step()
-        self.g_scheduler.step()
-        '''
 
     def train_cca_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
         """
