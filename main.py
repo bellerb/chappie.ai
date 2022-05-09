@@ -88,7 +88,9 @@ Starting game...
                 0,
                 #EPD = '1b4k1/Q7/p2np1/P1P2p2/1P3P2/1R5R/q6P/5rK1 b - -',
                 players = players,
-                SILENT = False
+                SILENT = False,
+                train = False,
+                game_num = 674
             )
             print(state)
         elif task == 1:
@@ -104,14 +106,14 @@ Please select which bot you would like to train?
             player = f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}'
             chess = chess()
             chess.traing_session(
-                loops = 1,
-                games = 1,
+                loops = 5,
+                games = 10,
                 boards = 1,
                 best_of = 3,
                 player = player,
                 SILENT = False,
                 tie_min = float('inf'),
-                full_model = True,
+                full_model = False,
                 #game_max = 200
             )
         elif task == 2:
@@ -160,6 +162,7 @@ Starting game...
                     players = players,
                     SILENT = False,
                     tie_min = float('inf'),
+                    game_num = 674,
                     #game_max = 200
                 )
                 print(state)
@@ -193,6 +196,8 @@ Starting games...
                                 players = players,
                                 SILENT = True,
                                 tie_min = float('inf'),
+                                train = False,
+                                game_num = 674,
                                 #game_max = 200
                             )
                             t_results = t_results.append({

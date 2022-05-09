@@ -47,6 +47,7 @@ class chess:
             'human'
         ],
         tie_min = 100,
+        game_num = 0,
         game_max = float('inf')
     ):
         """
@@ -80,7 +81,7 @@ class chess:
                     if str(p).lower() in human_code and len(log) < len(players):
                         a_players.append('human')
                     elif len(log) < len(players):
-                        a_players.append(deepcopy(Agent(param_name = p, train = train)))
+                        a_players.append(deepcopy(Agent(param_name = p, train = train, game_num = game_num)))
                     if 'human' in a_players:
                         if chess_game.p_move == 1:
                             print('\nWhites Turn [UPPER CASE]\n')
@@ -223,6 +224,12 @@ class chess:
                 else:
                     os.makedirs(f'{n_player}/weights')
         train_data = pd.DataFrame()
+        if os.path.exists(f'{player}/logs/game_log.csv'):
+            g_log = pd.read_csv(f'{player}/logs/game_log.csv').drop_duplicates(subset=['Game-ID'])
+            g_num = len(g_log)
+            del g_log
+        else:
+            g_num = 0
         #Begin training games
         for _ in range(LOOPS):
             for t, g_count in enumerate([T_GAMES, BEST_OF]):
@@ -245,7 +252,8 @@ class chess:
                         SILENT = SILENT,
                         players = a_players,
                         tie_min = tie_min,
-                        game_max = game_max
+                        game_max = game_max,
+                        game_num = g_num
                     )
                     if t == 0:
                         if state == [1, 0, 0]:
@@ -328,15 +336,15 @@ class chess:
                         if full_model == True:
                             s_headers = [h for h in g_log if 'state' in h]
                             #m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log[g_log['value']!=0.0].drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
-                            m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                            m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
                             del s_headers
                         else:
                             if g == g_count - 1:
                                 s_headers = [h for h in g_log if 'state' in h]
-                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
                                 del s_headers
                             else:
-                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(train_data, folder=n_player, encoder=False))
+                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(train_data, folder=n_player, encoder=False))
                         if os.path.exists(f'{player}/logs/training_log.csv'):
                             t_log = pd.read_csv(f'{player}/logs/training_log.csv')
                         else:
@@ -356,6 +364,7 @@ class chess:
                             f'{n_player}/weights',
                             f'{player}/weights'
                         ) #Move model data over if none exists
+                    g_num += 1
 
     def replay_game(
         game_id,

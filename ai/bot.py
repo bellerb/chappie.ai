@@ -19,10 +19,11 @@ class Agent:
     """
     Main agent interface
     """
-    def __init__(self, param_name='model_param.json', train = False):
+    def __init__(self, param_name='model_param.json', train = False, game_num = 0):
         """
         Input: param_name - string representing the file that contains the models parameters
                train - boolean control for if the AI is in training mode or not (default = False) [OPTIONAL]
+               game_num - amount of games that have been trained (default = 0) [OPTIONAL]
         Description: Agent initail variables
         Output: None
         """
@@ -152,7 +153,8 @@ class Agent:
             self.noise = False
         #Decay tempature with as more training games played to cause pUCT formula to become more exploitative
         #self.T = m_param['search']['T']
-        self.T = 1 #Decay tempature
+        self.T = 1 * ((1 - 0.0001) ** game_num) #Decay tempature using exponential decay formula
+        #self.T = 1 #Decay tempature
         self.sim_amt = m_param['search']['sim_amt'] #Amount of simulations to run
         self.workers = m_param['search']['workers'] #Amount of threads in search
         self.training_settings =  m_param['training'] #Training settings
@@ -280,6 +282,7 @@ class Agent:
                 for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
                     state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
                     if epoch <= full_count - 1 and encoder is True:
+                        '''
                         #Train trunk of model
                         if self.E_DB is not None:
                             self.tools.multi_thread(
@@ -307,9 +310,10 @@ class Agent:
                         if self.E_DB is not None:
                             self.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
                             #print('cca')
-                        '''
+
                     #Train heads of model
                     v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
+                    '''
                     self.tools.multi_thread(
                         [
                             {'name':'value', 'func':self.update_value_layer, 'args':(v, v_targets)},
@@ -328,7 +332,6 @@ class Agent:
                     #print('state')
                     self.update_reward_layer(r, r_targets)
                     #print('reward')
-                    '''
                     t_steps += 1
                     pbar.update(1)
             #Learning rate decay
