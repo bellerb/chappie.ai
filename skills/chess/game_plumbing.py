@@ -8,7 +8,8 @@ from copy import deepcopy
 class Plumbing():
     def __init__(
         self,
-        filename = 'skills/chess/data/token_bank.csv'
+        filename = 'skills/chess/data/token_bank.csv',
+        move_count = 5
     ):
         """
         Input: None
@@ -26,6 +27,8 @@ class Plumbing():
         self.x_map = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] #Board x representation
         self.y_map = ['8', '7', '6', '5', '4', '3', '2', '1'] #Board y representation
         self.token_bank = pd.read_csv(filename) #All tokens
+        self.move_count = move_count
+        self.move_que = [] #Previous moves
 
     def encode_state(self, game):
         """
@@ -52,6 +55,11 @@ class Plumbing():
             result = [self.token_bank['token'].eq(t).idxmax() for t in flat]
         else:
             result = []
+        if self.move_count > 1:
+            if len(self.move_que) == 0:
+                self.move_que = [len(self.token_bank) - 1] * ((len(result) * self.move_count) + 2)
+            move_que = result + [self.token_bank['token'].eq('SEP').idxmax()] + self.move_que[:(len(result) * (self.move_count - 1)) + 1]
+            return torch.tensor([move_que])
         return torch.tensor([result])
 
     def decode_state(self, state):

@@ -48,7 +48,8 @@ class chess:
         ],
         tie_min = 100,
         game_num = 0,
-        game_max = float('inf')
+        game_max = float('inf'),
+        move_count = 1
     ):
         """
         Input: game_name - string representing the name of the match
@@ -59,6 +60,7 @@ class chess:
                players - list containing the player paramater files (Default = ['skills/chess/data/active_param.json', 'human'] [OPTIONAL]
                tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
                game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
+               move_count - integer representing the amount of moves to keep in cache (Default = 1) [OPTIONAL]
         Description: play a game of chess
         Output: tuple containing the game outcome and a dataframe containing the game log
         """
@@ -70,7 +72,7 @@ class chess:
         ]
         end = False
         a_players = []
-        plumbing = Plumbing()
+        plumbing = Plumbing(move_count=move_count)
         if EPD is None:
             chess_game = deepcopy(Chess()) #'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
         else:
@@ -90,8 +92,13 @@ class chess:
                         chess_game.display()
                     enc_state = plumbing.encode_state(chess_game)
                     if a_players[i] == 'human':
-                        cur = input('What piece do you want to move?\n')
-                        next = input('Where do you want to move the piece to?\n')
+                        while True:
+                            cur = input('What piece do you want to move?\n').strip()
+                            next = input('Where do you want to move the piece to?\n').strip()
+                            if len(cur) == 2 and len(next) == 2:
+                                break
+                            else:
+                                print('\nInvalid input, cur and next must each be 2 char long (ex. cur = A2 & next = A4)\n')
                         a_map = np.zeros((8, 8, 8, 8))
                         a_map[chess_game.y.index(cur[1])][chess_game.x.index(cur[0])][chess_game.y.index(next[1])][chess_game.x.index(next[0])] = 1
                         a_map = a_map.flatten()
@@ -125,19 +132,23 @@ class chess:
                             print('Invalid move')
                     else:
                         valid = True
+                        if move_count > 1:
+                            plumbing.move_que = enc_state.tolist()[0]
                         cur_pos = chess_game.board_2_array(cur)
                         next_pos = chess_game.board_2_array(next)
                         if a_players[i] == 'human':
                             log.append({
                                 **{f'state{i}':float(s) for i, s in enumerate(enc_state[0])},
                                 **{f'prob{x}':1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)},
-                                **{'action':b_a}
+                                **{'action':b_a},
+                                'player':p
                             })
                         else:
                             log.append({
                                 **{f'state{i}':float(s) for i, s in enumerate(enc_state[0])},
                                 **{f'prob{x}':p for x, p in enumerate(probs)},
-                                **{'action':b_a, 'time':(datetime.now() - t1).total_seconds()}
+                                **{'action':b_a, 'time':(datetime.now() - t1).total_seconds()},
+                                'player':p
                             })
                         if SILENT == False or a_players[i] == 'human':
                             if chess_game.p_move > 0:
@@ -162,7 +173,7 @@ class chess:
                             if SILENT == False or a_players[i] == 'human':
                                 print(f'FINISHED | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} STATE:{state}\n')
                             game_train_data = pd.DataFrame(log)
-                            game_train_data = game_train_data.astype(float)
+                            game_train_data = game_train_data[[h for h in game_train_data if h != 'player']].astype(float)
                             end = True
                         break
                 if end == True:
@@ -186,7 +197,8 @@ class chess:
         player = 'skills/chess/data/models/test',
         tie_min = 100,
         game_max = float('inf'),
-        full_model = False
+        full_model = False,
+        move_count = 1
     ):
         """
         Input: games - integer representing the amount of games to train on (Default = 10) [OPTIONAL]
@@ -198,6 +210,7 @@ class chess:
                tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
                game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
                full_model - boolean representing if the full model is being trained every exploration game or not (Default = False) [OPTIONAL]
+               move_count - integer representing the amount of moves to keep in cache (Default = 1) [OPTIONAL]
         Description: train ai by playing multiple games of chess
         Output: None
         """
@@ -253,7 +266,8 @@ class chess:
                         players = a_players,
                         tie_min = tie_min,
                         game_max = game_max,
-                        game_num = g_num
+                        game_num = g_num,
+                        move_count = move_count
                     )
                     if t == 0:
                         if state == [1, 0, 0]:

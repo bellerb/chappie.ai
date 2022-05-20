@@ -71,10 +71,15 @@ Please select a bot to play?
 '''
             )
             m_choice = tools.give_options(model_list)
+            player = f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}'
             if p_col == 0:
-                players.append(f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}/parameters.json')
+                players.append(f'{player}/parameters.json')
             else:
-                players.insert(0, f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}/parameters.json')
+                players.insert(0, f'{player}/parameters.json')
+            if os.path.exists(f'{player}/logs/game_log(human).csv'):
+                game_num = len(pd.read_csv(f'{player}/logs/game_log(human).csv'))
+            else:
+                game_num = 0
             chess = chess()
             print(
 '''
@@ -90,9 +95,17 @@ Starting game...
                 players = players,
                 SILENT = False,
                 train = False,
-                game_num = 674
+                game_num = game_num
             )
             print(state)
+            if os.path.exists(f'{player}/logs') == False:
+                os.makedirs(f'{player}/logs') #Create folder
+            if os.path.exists(f'{player}/logs/game_log(human).csv'):
+                g_log = pd.read_csv(f'{player}/logs/game_log(human).csv')
+            else:
+                g_log = pd.DataFrame()
+            g_log = g_log.append(log, ignore_index=True)
+            g_log.to_csv(f'{player}/logs/game_log(human).csv', index=False)
         elif task == 1:
             print(
 '''
@@ -114,6 +127,7 @@ Please select which bot you would like to train?
                 SILENT = False,
                 tie_min = float('inf'),
                 full_model = False,
+                move_count = 5,
                 #game_max = 200
             )
         elif task == 2:

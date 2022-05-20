@@ -14,12 +14,12 @@ index,token,description
 12,rb,black rook
 13,qb,black queen
 14,kb,black king
-25,50m,fifty move rule
-26,3f,three fold rule
-27,qpm,queen pawn promotion
-28,npm,knight pawn promotion
-29,rpm,rook pawn promotion
-30,bpm,biship pawn promotion
-31,SEP,seperation token (SPECIAL)
-32,MASK,token used for masking (SPECIAL)
-33,PAD,token used for padding (SPECIAL)
+15,50m,fifty move rule
+16,3f,three fold rule
+17,qpm,queen pawn promotion
+18,npm,knight pawn promotion
+19,rpm,rook pawn promotion
+20,bpm,biship pawn promotion
+21,SEP,seperation token (SPECIAL)
+22,MASK,token used for masking (SPECIAL)
+23,PAD,token used for padding (SPECIAL)
