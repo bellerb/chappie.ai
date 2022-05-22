@@ -173,7 +173,8 @@ class chess:
                             if SILENT == False or a_players[i] == 'human':
                                 print(f'FINISHED | GAME:{epoch} BOARD:{game_name} MOVE:{len(log)} STATE:{state}\n')
                             game_train_data = pd.DataFrame(log)
-                            game_train_data = game_train_data[[h for h in game_train_data if h != 'player']].astype(float)
+                            float_headers = [h for h in game_train_data if h != 'player']
+                            game_train_data[float_headers] = game_train_data[float_headers].astype(float)
                             end = True
                         break
                 if end == True:
