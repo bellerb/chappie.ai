@@ -202,7 +202,7 @@ class Chess:
         """
         cp = self.board_2_array(cur_pos)
         np = self.board_2_array(next_pos)
-        if self.valid_move(cp, np) == True:
+        if self.valid_move(cp, np) is True:
             part = self.board[cp[1]][cp[0]]
             if np == self.en_passant and (part == 1 or part == -1):
                 self.board[self.en_passant[1]-(self.p_move*(-1))][self.en_passant[0]] = 0
