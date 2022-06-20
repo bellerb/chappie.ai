@@ -14,13 +14,37 @@ class ToolBox:
     The ToolBox is a class containing miscellaneous functions used throughout the agent
     """
 
+    def convert_token_2_embedding(self, t_db, representation, backbone):
+        """
+        Input: t_db - dataframe containing the state tokens that you want to be converted to encodings
+               representation - model used to create game state representations
+               backbone - model used as the backbone of our multi task model
+        Description: builds embedding database from tokens
+        Output: dataframe containing embeddings
+        """
+        headers = list(t_db.columns)
+        e_db = []
+        with tqdm(total=len(t_db), desc='Embedding DB') as pbar:
+            for i, row in t_db.iterrows():
+                hold = torch.tensor(row[headers].values).to(torch.long).reshape(1, len(headers))
+                hold = representation(hold)
+                hold = backbone(hold, torch.zeros(1, 1).to(torch.long))
+                e_db.append({
+                    'encoding':hold.tolist(),
+                    'state':row[headers].tolist()
+                })
+                pbar.update(1)
+        del hold
+        del t_db
+        return pd.DataFrame(e_db)
+
     def build_embedding_db(self, representation, backbone, f_name = None, s_header = 'state'):
         """
         Input: representation - model used to create game state representations
                backbone - model used as the backbone of our multi task model
                f_name - string representing the game state data (Default = None) [OPTIONAL]
                s_header - string representing the main name used in game state token database (Default = 'state') [OPTIONAL]
-        Description: builds embedding database from tokens
+        Description: builds embedding database from tokens file
         Output: dataframe containing embeddings
         """
         if f_name is not None and isfile(f_name):
@@ -29,21 +53,7 @@ class ToolBox:
         else:
             t_db = None
         if t_db is not None:
-            headers = list(t_db.columns)
-            e_db = []
-            with tqdm(total=len(t_db), desc='Embedding DB') as pbar:
-                for i, row in t_db.iterrows():
-                    hold = torch.tensor(row[headers].values).to(torch.long).reshape(1, len(headers))
-                    hold = representation(hold)
-                    hold = backbone(hold, torch.zeros(1, 1).to(torch.long))
-                    e_db.append({
-                        'encoding':hold.tolist(),
-                        'state':row[headers].tolist()
-                    })
-                    pbar.update(1)
-            del hold
-            del t_db
-            e_db = pd.DataFrame(e_db)
+            e_db = self.convert_token_2_embedding(t_db, representation, backbone)
         else:
             e_db = None
         return e_db
@@ -58,12 +68,12 @@ class ToolBox:
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
             e_db['L2'] = e_db.apply(
-                lambda x:torch.linalg.norm(chunk - torch.tensor(x['encoding'][0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(),
+                lambda x:torch.linalg.norm(chunk - torch.tensor(x['encoding'][0][chunk.size(0) * i:chunk.size(0) * (i + 1)]).to(torch.float)).item(),
                 axis=1
             )
             kNN = torch.tensor([e_db.nsmallest(k, ['L2'])['encoding'].tolist()])
             neighbours = torch.cat([neighbours, kNN])
-        return neighbours
+        return neighbours.to(torch.float)
 
     def multi_process(self, func, workers = None):
         """

@@ -259,7 +259,7 @@ class Chess:
             if part * self.p_move > 0 and part != 0:
                 p_name = self.parts[int(part) if part > 0 else int(part)*(-1)] #Get name of part
                 v_moves = getattr(Chess, p_name).movement(self, self.p_move, cur_pos, capture=True)
-                #print(v_moves)
+                #print(v_moves) 
                 if len(self.log) > 0 and '+' in self.log[-1]:
                     v_moves = [m for m in v_moves if cur_pos in self.c_escape and m in self.c_escape[cur_pos]]
                 if next_pos in v_moves:

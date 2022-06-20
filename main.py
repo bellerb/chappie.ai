@@ -1,12 +1,11 @@
 import os
+import json
+import pandas as pd
+import torch
+
+from ai.model import Representation, Backbone
 from tools.toolbox import ToolBox
 from skills.chess.game_interface import chess
-
-import pandas as pd
-
-import torch
-import json
-from ai.model import Representation, Backbone
 
 if __name__ == '__main__':
     '''
@@ -51,6 +50,7 @@ if __name__ == '__main__':
             if m != '.DS_Store' and '(temp)' not in m:
                 model_list.append(f'{m} ({i})')
                 i += 1
+        #PLAY CHESS ---------------------------------------
         if task == 0:
             print(
 '''
@@ -106,6 +106,7 @@ Starting game...
                 g_log = pd.DataFrame()
             g_log = g_log.append(log, ignore_index=True)
             g_log.to_csv(f'{player}/logs/game_log(human).csv', index=False)
+        #TRAIN CHESS ---------------------------------------
         elif task == 1:
             print(
 '''
@@ -120,16 +121,17 @@ Please select which bot you would like to train?
             chess = chess()
             chess.traing_session(
                 loops = 1,
-                games = 1,
+                games = 5,
                 boards = 1,
                 best_of = 3,
                 player = player,
                 SILENT = False,
                 tie_min = float('inf'),
-                full_model = True,
+                full_model = False,
                 move_count = 5,
                 #game_max = 200
             )
+        #EVAL CHESS ---------------------------------------
         elif task == 2:
             print(
 '''

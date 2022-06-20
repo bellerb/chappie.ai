@@ -183,6 +183,19 @@ class chess:
                     chess_game.p_move = chess_game.p_move * (-1)
             if end == True:
                 break
+        for i, p in enumerate(players):
+            if a_players[i].E_DB is not None:
+                new_tokens = a_players[i].tools.convert_token_2_embedding(
+                    game_train_data[[h for h in game_train_data if 'state' in h]].drop_duplicates(),
+                    a_players[i].m_weights['representation']['model'],
+                    a_players[i].m_weights['backbone']['model']
+                )
+                #new_tokens['state'] = new_tokens['state'].apply(lambda x: x if isinstance(x, list) else x.tolist())
+                #new_tokens['encoding'] = new_tokens['encoding'].apply(lambda x: x if isinstance(x, list) else x.tolist())
+                a_players[i].E_DB = a_players[i].E_DB.append(new_tokens, ignore_index=True)
+                a_players[i].E_DB['state'] = a_players[i].E_DB['state'].apply(lambda x: x if isinstance(x, list) else x.tolist())
+                a_players[i].E_DB['encoding'] = a_players[i].E_DB['encoding'].apply(lambda x: x if isinstance(x, list) else x.tolist())
+                a_players[i].E_DB.to_csv(f"{'/'.join(p.split('/')[:-1]).replace('(temp)', '')}/logs/encoded_data.csv", index=False)
         del a_players
         if t_code == True: print(f'Game Code Found = {state}\n')
         return state, game_train_data

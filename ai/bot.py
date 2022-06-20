@@ -153,7 +153,7 @@ class Agent:
             self.noise = False
         #Decay tempature with as more training games played to cause pUCT formula to become more exploitative
         #self.T = m_param['search']['T']
-        self.T = 1 * ((1 - 0.0001) ** game_num) #Decay tempature using exponential decay formula
+        self.T = 1 * ((1 - m_param['search']['T']) ** game_num) #Decay tempature using exponential decay formula
         #self.T = 1 #Decay tempature
         self.sim_amt = m_param['search']['sim_amt'] #Amount of simulations to run
         self.workers = m_param['search']['workers'] #Amount of threads in search
@@ -161,11 +161,18 @@ class Agent:
         #self.single_player = m_param['search']['single_player']
         self.tools = ToolBox()
         if p_model['retro'] is True:
-            self.E_DB = self.tools.build_embedding_db(
-                representation,
-                backbone,
-                f_name = f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/game_log.csv".replace('(temp)','')
-            )
+            if os.path.exists(f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/encoded_data.csv".replace('(temp)','')):
+                self.E_DB = pd.read_csv(f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/encoded_data.csv".replace('(temp)',''))
+                self.E_DB['state'] = self.E_DB['state'].apply(eval).apply(np.array)
+                self.E_DB['encoding'] = self.E_DB['encoding'].apply(eval).apply(np.array)
+                #print(self.E_DB['encoding'].iloc[0])
+            else:
+                self.E_DB = self.tools.build_embedding_db(
+                    representation,
+                    backbone,
+                    f_name = f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/game_log.csv".replace('(temp)','')
+                )
+                self.E_DB.to_csv(f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/encoded_data.csv".replace('(temp)',''), index=False)
         else:
             self.E_DB = None
 
@@ -274,8 +281,8 @@ class Agent:
             if encoder is True and epoch <= full_count - 1:
                 self.total_loss['hidden loss'] = 0.
                 self.total_loss['backbone loss'] = 0.
-                if self.E_DB is not None:
-                    self.total_loss['Cca loss'] = 0.
+            if self.E_DB is not None:
+                self.total_loss['Cca loss'] = 0.
             if encoder is True and epoch > full_count - 1:
                 data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
             with tqdm(total=int(len(data)/self.training_settings['bsz']) + 1, desc='Training Batch') as pbar:
@@ -307,9 +314,9 @@ class Agent:
                         #print('rep')
                         self.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
                         #print('back')
-                        if self.E_DB is not None:
-                            self.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                            #print('cca')
+                    if self.E_DB is not None:
+                        self.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                        #print('cca')
 
                     #Train heads of model
                     v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
@@ -338,8 +345,8 @@ class Agent:
             if epoch <= full_count - 1 and encoder is True:
                 self.h_scheduler.step()
                 self.g_scheduler.step()
-                if self.E_DB is not None:
-                    self.cca_scheduler.step()
+            if self.E_DB is not None:
+                self.cca_scheduler.step()
             self.v_scheduler.step()
             self.p_scheduler.step()
             self.r_scheduler.step()
