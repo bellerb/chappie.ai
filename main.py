@@ -120,7 +120,7 @@ Please select which bot you would like to train?
             player = f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}'
             chess = chess()
             chess.traing_session(
-                loops = 1,
+                loops = 3,
                 games = 5,
                 boards = 1,
                 best_of = 3,
@@ -128,7 +128,7 @@ Please select which bot you would like to train?
                 SILENT = False,
                 tie_min = float('inf'),
                 full_model = False,
-                move_count = 5,
+                move_count = 1, #5 for model 13 & 12
                 #game_max = 200
             )
         #EVAL CHESS ---------------------------------------

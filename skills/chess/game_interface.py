@@ -90,6 +90,7 @@ class chess:
                         else:
                             print('\nBlacks Turn [LOWER CASE]\n')
                         chess_game.display()
+                    plumbing.move_count = a_players[i].move_count
                     enc_state = plumbing.encode_state(chess_game)
                     if a_players[i] == 'human':
                         while True:

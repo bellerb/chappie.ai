@@ -152,9 +152,8 @@ class Agent:
         else:
             self.noise = False
         #Decay tempature with as more training games played to cause pUCT formula to become more exploitative
-        #self.T = m_param['search']['T']
         self.T = 1 * ((1 - m_param['search']['T']) ** game_num) #Decay tempature using exponential decay formula
-        #self.T = 1 #Decay tempature
+        self.move_count = m_param['search']['move_cache'] #Amount of moves to cache
         self.sim_amt = m_param['search']['sim_amt'] #Amount of simulations to run
         self.workers = m_param['search']['workers'] #Amount of threads in search
         self.training_settings =  m_param['training'] #Training settings
