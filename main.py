@@ -128,7 +128,6 @@ Please select which bot you would like to train?
                 SILENT = False,
                 tie_min = float('inf'),
                 full_model = False,
-                move_count = 1, #5 for model 13 & 12
                 #game_max = 200
             )
         #EVAL CHESS ---------------------------------------

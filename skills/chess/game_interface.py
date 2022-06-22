@@ -48,8 +48,7 @@ class chess:
         ],
         tie_min = 100,
         game_num = 0,
-        game_max = float('inf'),
-        move_count = 1
+        game_max = float('inf')
     ):
         """
         Input: game_name - string representing the name of the match
@@ -60,7 +59,6 @@ class chess:
                players - list containing the player paramater files (Default = ['skills/chess/data/active_param.json', 'human'] [OPTIONAL]
                tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
                game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
-               move_count - integer representing the amount of moves to keep in cache (Default = 1) [OPTIONAL]
         Description: play a game of chess
         Output: tuple containing the game outcome and a dataframe containing the game log
         """
@@ -72,7 +70,7 @@ class chess:
         ]
         end = False
         a_players = []
-        plumbing = Plumbing(move_count=move_count)
+        plumbing = Plumbing()
         if EPD is None:
             chess_game = deepcopy(Chess()) #'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
         else:
@@ -133,7 +131,7 @@ class chess:
                             print('Invalid move')
                     else:
                         valid = True
-                        if move_count > 1:
+                        if plumbing.move_count > 1:
                             plumbing.move_que = enc_state.tolist()[0]
                         cur_pos = chess_game.board_2_array(cur)
                         next_pos = chess_game.board_2_array(next)
@@ -212,8 +210,7 @@ class chess:
         player = 'skills/chess/data/models/test',
         tie_min = 100,
         game_max = float('inf'),
-        full_model = False,
-        move_count = 1
+        full_model = False
     ):
         """
         Input: games - integer representing the amount of games to train on (Default = 10) [OPTIONAL]
@@ -225,7 +222,6 @@ class chess:
                tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
                game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
                full_model - boolean representing if the full model is being trained every exploration game or not (Default = False) [OPTIONAL]
-               move_count - integer representing the amount of moves to keep in cache (Default = 1) [OPTIONAL]
         Description: train ai by playing multiple games of chess
         Output: None
         """
@@ -281,8 +277,7 @@ class chess:
                         players = a_players,
                         tie_min = tie_min,
                         game_max = game_max,
-                        game_num = g_num,
-                        move_count = move_count
+                        game_num = g_num
                     )
                     if t == 0:
                         if state == [1, 0, 0]:
