@@ -359,15 +359,20 @@ class chess:
                     if t == 0:
                         if full_model == True:
                             s_headers = [h for h in g_log if 'state' in h]
+                            g_log = g_log.drop_duplicates(subset=s_headers, keep='last')
                             #m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False).train(g_log[g_log['value']!=0.0].drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
-                            m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                            m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(g_log, folder=n_player))
                             del s_headers
+                            del g_log
                         else:
                             if g == g_count - 1:
                                 s_headers = [h for h in g_log if 'state' in h]
-                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(g_log.drop_duplicates(subset=s_headers, keep='last'), folder=n_player))
+                                g_log = g_log.drop_duplicates(subset=s_headers, keep='last')
+                                m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(g_log, folder=n_player))
                                 del s_headers
+                                del g_log
                             else:
+                                del g_log
                                 m_log = pd.DataFrame(Agent(param_name = f'{n_player}/parameters.json', train = False, game_num = g_num).train(train_data, folder=n_player, encoder=False))
                         if os.path.exists(f'{player}/logs/training_log.csv'):
                             t_log = pd.read_csv(f'{player}/logs/training_log.csv')
@@ -379,7 +384,6 @@ class chess:
                         t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
                         del t_log
                     #GARBEGE CLEAN UP
-                    del g_log
                     train_data = pd.DataFrame()
                     if os.path.exists(f'{player}/weights') == False:
                         os.makedirs(f'{player}/weights') #Create folder

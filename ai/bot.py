@@ -60,18 +60,20 @@ class Agent:
             self_dropout = p_model['self_dropout']
         ).to(self.Device)
         backbone.eval()
-        Cca = ChunkedCrossAttention(
-            p_model['latent_size'][-1],
-            layer_size = p_model['chunked_inner'],
-            heads = p_model['chunked_heads'],
-            dropout = p_model['chunked_dropout'],
-            n = p_model['latent_size'][0], #Sequence length
-            m = p_model['chunked_length'], #Chunk length
-            k = p_model['neighbour_amt'], #Amount of neighbours
-            r = p_model['latent_size'][0], #Retrieval length
-            d = p_model['latent_size'][-1] #Embedding size
-        ).to(self.Device)
-        Cca.eval()
+        if p_model['retro'] is True:
+            Cca = ChunkedCrossAttention(
+                p_model['latent_size'][-1],
+                layer_size = p_model['chunked_inner'],
+                heads = p_model['chunked_heads'],
+                dropout = p_model['chunked_dropout'],
+                n = p_model['latent_size'][0], #Sequence length
+                m = p_model['chunked_length'], #Chunk length
+                k = p_model['neighbour_amt'], #Amount of neighbours
+                r = p_model['latent_size'][0], #Retrieval length
+                d = p_model['latent_size'][-1] #Embedding size
+            ).to(self.Device)
+            Cca.eval()
+
         self.m_weights = {
             'representation':{
                 'model':representation,
@@ -80,12 +82,14 @@ class Agent:
             'backbone':{
                 'model':backbone,
                 'param':m_param['data']['active-models']['backbone']
-            },
-            'cca':{
+            }
+
+        }
+        if p_model['retro'] is True:
+            self.m_weights['cca'] = {
                 'model':Cca,
                 'param':m_param['data']['active-models']['cca']
             }
-        }
         heads = {
             'policy':{
                 'input':'action_space',
@@ -137,7 +141,7 @@ class Agent:
             self.m_weights['policy']['model'],
             self.m_weights['state']['model'],
             self.m_weights['reward']['model'],
-            Cca = self.m_weights['cca']['model'],
+            Cca = self.m_weights['cca']['model'] if p_model['retro'] is True else None,
             action_space = m_param['model']['action_space'],
             c2 = m_param['search']['c2'],
             d_a = m_param['search']['d_a'],
@@ -643,3 +647,18 @@ class Agent:
             r_target.to(torch.float),
             a_target.to(torch.int64)
         )
+
+    def model_parameters(self, layers, trainable = False):
+        """
+        Input: layers - dictionary containing full model layers
+               trainable - boolean representing if you want to count only the trainable parameters (Default = False) [OPTIONAL]
+        Description: Count total amount of parameters in a model
+        Output: dictionary containing model parameters count
+        """
+        result = {}
+        full_model_param = 0
+        for m in layers:
+            result[m] = sum(p.numel() for p in layers[m]['model'].parameters() if p.requires_grad) \
+                if trainable is True else sum(p.numel() for p in layers[m]['model'].parameters())
+        result['full'] = sum(v for v in result.values())
+        return result
