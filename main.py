@@ -1,8 +1,12 @@
 import os
+import time
 import json
 import pandas as pd
 import torch
+from datetime import datetime
+from tqdm import tqdm
 
+from ai.bot import Agent
 from ai.model import Representation, Backbone
 from tools.toolbox import ToolBox
 from skills.chess.game_interface import chess
@@ -111,25 +115,158 @@ Starting game...
             print(
 '''
 -------------------------------------------------
+What kind of training would you like to do?
+-------------------------------------------------
+'''
+            )
+            t_methods = [
+                'Supervised            (s)',
+                'Offline Reinforcement (r)'
+            ]
+            t_choice = tools.give_options(t_methods)
+            if t_choice == 0:
+                print(
+'''
+-------------------------------------------------
+Which model would you like to train?
+-------------------------------------------------
+'''
+                )
+                i = 0
+                model_list = []
+                for m in os.listdir('skills/chess/data/models'):
+                    if m != '.DS_Store' and '(temp)' not in m and os.path.exists(f'skills/chess/data/models/{m}/logs/game_log.csv'):
+                        model_list.append(f'{m} ({i})')
+                        i += 1
+                m_choice = tools.give_options(model_list)
+                player = model_list[m_choice].split("(")[0].strip()
+                agent = Agent(
+                    param_name = f'skills/chess/data/models/{player}/parameters.json',
+                    train = False
+                )
+                print(
+'''
+-------------------------------------------------
+Which layer do you want to train?
+-------------------------------------------------
+'''
+                )
+                layer_list = [
+                    'Representation (h)',
+                    'Backbone       (b)'
+                ]
+                if agent.E_DB is not None:
+                    layer_list.append('Cca            (c)')
+                layer_list += [
+                    'Value          (v)',
+                    'Policy         (p)',
+                    'State          (s)',
+                    'Reward         (r)'
+                ]
+                l_choice = tools.give_options(layer_list)
+                if 'Representation' in layer_list[l_choice] or 'Backbone' in layer_list[l_choice] or 'Cca' in layer_list[l_choice]:
+                    agent.mse = torch.nn.MSELoss() #Mean squared error loss
+                    agent.bce = torch.nn.BCELoss() #Binary cross entropy loss
+                elif 'Policy' not in layer_list[l_choice]:
+                    agent.mse = torch.nn.MSELoss() #Mean squared error loss
+                else:
+                    agent.bce = torch.nn.BCELoss() #Binary cross entropy loss
+                #Load model weights
+                for l in layer_list:
+                    longform_layer, shortform_layer = l.split('(')
+                    longform_layer = longform_layer.strip().lower()
+                    shortform_layer = shortform_layer.replace(')', '').strip()
+                    agent.init_model_4_training(
+                        f'{shortform_layer}_optimizer',
+                        f'{shortform_layer}_scheduler',
+                        longform_layer,
+                        f'{shortform_layer}_step',
+                        f'{shortform_layer}_gamma'
+                    )
+                if os.path.exists(f'{player}/logs/training_log.csv'):
+                    t_log = pd.read_csv(f'{player}/logs/training_log.csv')
+                else:
+                    t_log = pd.DataFrame()
+                start_time = time.time() #Get time of starting process
+                layer_name = layer_list[l_choice].split("(")[0].strip().lower()
+                print(
+'''
+-------------------------------------------------
+Training layer
+-------------------------------------------------
+'''
+                )
+                data = pd.read_csv(f'skills/chess/data/models/{player}/logs/game_log.csv')
+                for epoch in range(agent.training_settings['epoch']):
+                    t_steps = 0 #Current training step
+                    agent.total_loss = {f'{layer_name} loss':0.}
+                    with tqdm(total=int(len(data) / agent.training_settings['bsz']) + 1, desc='Training Batch') as pbar:
+                        for batch, i in enumerate(range(0, len(data), agent.training_settings['bsz'])):
+                            state, s_targets, p_targets, v_targets, r_targets, a_targets = agent.get_batch(data, i, agent.training_settings['bsz']) #Get batch data with the selected targets being masked
+                            if 'Representation' in layer_list[l_choice]:
+                                agent.train_representation_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                                agent.h_scheduler.step()
+                            if 'Backbone' in layer_list[l_choice]:
+                                agent.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                                agent.g_scheduler.step()
+                            if 'Cca' in layer_list[l_choice]:
+                                agent.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
+                                agent.cca_scheduler.step()
+                            if 'Representation' not in layer_list[l_choice] and 'Backbone' not in layer_list[l_choice] and 'Cca' not in layer_list[l_choice]:
+                                v, p, r, s, s_h = agent.forward_pass(state, a_targets, s_targets)
+                            if 'Value' in layer_list[l_choice]:
+                                agent.update_value_layer(v, v_targets)
+                                agent.v_scheduler.step()
+                            if 'Policy' in layer_list[l_choice]:
+                                agent.update_policy_layer(p, p_targets)
+                                agent.p_scheduler.step()
+                            if 'State' in layer_list[l_choice]:
+                                agent.update_next_state_layer(s, s_h)
+                                agent.s_scheduler.step()
+                            if 'Reward' in layer_list[l_choice]:
+                                agent.update_reward_layer(r, r_targets)
+                                agent.r_scheduler.step()
+                            t_steps += 1
+                            pbar.update(1)
+                    print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in agent.total_loss.items())}\n')
+                    t_log = t_log.append({
+                        **{
+                            'Date':datetime.now(),
+                            'Epoch':epoch,
+                            'Samples':len(data),
+                            'Time':time.time() - start_time
+                        },
+                        **{k:(v / t_steps) for k, v in agent.total_loss.items()}
+                    }, ignore_index=True)
+                if os.path.exists(f'skills/chess/data/models/{player}/weights') is False:
+                    os.makedirs(f'skills/chess/data/models/{player}/weights') #Create folder
+                torch.save({
+                    'state_dict': agent.m_weights[layer_name]['model'].state_dict(),
+                }, f"skills/chess/data/models/{player}/weights/{agent.m_weights[layer_name]['param']}")
+                t_log.to_csv(f'skills/chess/data/models/{player}/logs/training_log.csv', index=False)
+            elif t_choice == 1:
+                print(
+'''
+-------------------------------------------------
 Training chess bots.
 Please select which bot you would like to train?
 -------------------------------------------------
 '''
-            )
-            m_choice = tools.give_options(model_list)
-            player = f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}'
-            chess = chess()
-            chess.traing_session(
-                loops = 3,
-                games = 5,
-                boards = 1,
-                best_of = 3,
-                player = player,
-                SILENT = False,
-                tie_min = float('inf'),
-                full_model = False,
-                #game_max = 200
-            )
+                )
+                m_choice = tools.give_options(model_list)
+                player = f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}'
+                chess = chess()
+                chess.traing_session(
+                    loops = 3,
+                    games = 5,
+                    boards = 1,
+                    best_of = 3,
+                    player = player,
+                    SILENT = False,
+                    tie_min = float('inf'),
+                    full_model = False,
+                    #game_max = 200
+                )
         #EVAL CHESS ---------------------------------------
         elif task == 2:
             print(
