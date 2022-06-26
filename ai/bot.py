@@ -268,7 +268,7 @@ class Agent:
         self.bce = torch.nn.BCELoss() #Binary cross entropy loss
         #Load model weights
         self.init_model_4_training('h_optimizer', 'h_scheduler', 'representation', 'h_step', 'h_gamma') #Hidden layer settings
-        self.init_model_4_training('g_optimizer', 'g_scheduler', 'backbone', 'b_step', 'b_gamma') #Backbone layer settings
+        self.init_model_4_training('b_optimizer', 'b_scheduler', 'backbone', 'b_step', 'b_gamma') #Backbone layer settings
         if self.E_DB is not None:
             self.init_model_4_training('cca_optimizer', 'cca_scheduler', 'cca', 'cca_step', 'cca_gamma') #Chunked cross-attention layer settings
         self.init_model_4_training('v_optimizer', 'v_scheduler', 'value', 'v_step', 'v_gamma') #Value head settings
@@ -282,7 +282,7 @@ class Agent:
             t_steps = 0 #Current training step
             self.total_loss = {'value loss':0., 'policy loss':0., 'state loss':0, 'reward loss':0.}
             if encoder is True and epoch <= full_count - 1:
-                self.total_loss['hidden loss'] = 0.
+                self.total_loss['representation loss'] = 0.
                 self.total_loss['backbone loss'] = 0.
             if self.E_DB is not None:
                 self.total_loss['Cca loss'] = 0.
@@ -347,7 +347,7 @@ class Agent:
             #Learning rate decay
             if epoch <= full_count - 1 and encoder is True:
                 self.h_scheduler.step()
-                self.g_scheduler.step()
+                self.b_scheduler.step()
             if self.E_DB is not None:
                 self.cca_scheduler.step()
             self.v_scheduler.step()
@@ -428,7 +428,7 @@ class Agent:
         h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
         #Update hidden layer weights
         self.h_optimizer.zero_grad()
-        self.total_loss['hidden loss'] += h_loss.item()
+        self.total_loss['representation loss'] += h_loss.item()
         h_loss.backward(
             retain_graph = True,
             inputs = list(self.m_weights['representation']['model'].parameters())
@@ -459,7 +459,7 @@ class Agent:
         d_loss = self.mse(d_0, d_1) #Apply loss function to results
 
         self.total_loss['backbone loss'] += d_loss.item()
-        self.g_optimizer.zero_grad()
+        self.b_optimizer.zero_grad()
         d_loss.backward(
             retain_graph = True,
             inputs = list(self.m_weights['backbone']['model'].parameters())
@@ -468,7 +468,7 @@ class Agent:
             self.m_weights['backbone']['model'].parameters(),
             self.training_settings['b_max_norm']
         )
-        self.g_optimizer.step()
+        self.b_optimizer.step()
 
     def train_cca_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
         """

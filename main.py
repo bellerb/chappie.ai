@@ -208,7 +208,7 @@ Training layer
                                 agent.h_scheduler.step()
                             if 'Backbone' in layer_list[l_choice]:
                                 agent.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                                agent.g_scheduler.step()
+                                agent.b_scheduler.step()
                             if 'Cca' in layer_list[l_choice]:
                                 agent.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
                                 agent.cca_scheduler.step()
