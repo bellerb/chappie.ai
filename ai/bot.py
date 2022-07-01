@@ -270,7 +270,7 @@ class Agent:
         self.init_model_4_training('h_optimizer', 'h_scheduler', 'representation', 'h_step', 'h_gamma') #Hidden layer settings
         self.init_model_4_training('b_optimizer', 'b_scheduler', 'backbone', 'b_step', 'b_gamma') #Backbone layer settings
         if self.E_DB is not None:
-            self.init_model_4_training('cca_optimizer', 'cca_scheduler', 'cca', 'cca_step', 'cca_gamma') #Chunked cross-attention layer settings
+            self.init_model_4_training('cca_optimizer', 'cca_scheduler', 'cca', 'c_step', 'cca_gamma') #Chunked cross-attention layer settings
         self.init_model_4_training('v_optimizer', 'v_scheduler', 'value', 'v_step', 'v_gamma') #Value head settings
         self.init_model_4_training('p_optimizer', 'p_scheduler', 'policy', 'p_step', 'p_gamma') #Policy head settings
         self.init_model_4_training('s_optimizer', 's_scheduler', 'state', 's_step', 's_gamma') #Next state representation head settings
@@ -285,7 +285,7 @@ class Agent:
                 self.total_loss['representation loss'] = 0.
                 self.total_loss['backbone loss'] = 0.
             if self.E_DB is not None:
-                self.total_loss['Cca loss'] = 0.
+                self.total_loss['cca loss'] = 0.
             if encoder is True and epoch > full_count - 1:
                 data = data[data['Game-ID']==data.iloc[-1]['Game-ID']]
             with tqdm(total=int(len(data)/self.training_settings['bsz']) + 1, desc='Training Batch') as pbar:
@@ -488,7 +488,7 @@ class Agent:
         s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
         cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
         #Update chunked cross-attention layer weights
-        self.total_loss['Cca loss'] += cca_loss.item()
+        self.total_loss['cca loss'] += cca_loss.item()
         self.cca_optimizer.zero_grad()
         cca_loss.backward(
             retain_graph = True,

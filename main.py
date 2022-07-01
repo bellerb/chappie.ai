@@ -257,8 +257,8 @@ Please select which bot you would like to train?
                 player = f'skills/chess/data/models/{model_list[m_choice].split("(")[0].strip()}'
                 chess = chess()
                 chess.traing_session(
-                    loops = 3,
-                    games = 5,
+                    loops = 1,
+                    games = 50,
                     boards = 1,
                     best_of = 3,
                     player = player,
