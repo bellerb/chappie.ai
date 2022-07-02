@@ -211,7 +211,7 @@ Training layer
                                 agent.b_scheduler.step()
                             if 'Cca' in layer_list[l_choice]:
                                 agent.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                                agent.cca_scheduler.step()
+                                agent.c_scheduler.step()
                             if 'Representation' not in layer_list[l_choice] and 'Backbone' not in layer_list[l_choice] and 'Cca' not in layer_list[l_choice]:
                                 v, p, r, s, s_h = agent.forward_pass(state, a_targets, s_targets)
                             if 'Value' in layer_list[l_choice]:

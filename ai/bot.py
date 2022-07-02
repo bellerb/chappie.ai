@@ -254,12 +254,20 @@ class Agent:
         )
         self.m_weights[model_name][m_header].train()
 
+    def train_layer(param):
+        """
+        Input: None
+        Description: Module for training a layer of the model
+        Output: None
+        """
+        pass
+
     def train(self, data, folder = None, encoder = True, full_count = 1):
         """
         Input: data - dataframe containing training data
                folder -  string representing the folder to save the new weights in (Default = None) [OPTIONAL]
                encoder - boolean representing if you want to retrain the encoder models or not (Default = True) [OPTIONAL]
-               full_count - integer representing the amount of epochs to do full model training for (Default = 1) [OPTIONAL]
+               full_count - integer representing the amoun  t of epochs to do full model training for (Default = 1) [OPTIONAL]
         Description: Training of the models
         Output: dataframe containing the training log
         """
@@ -270,7 +278,7 @@ class Agent:
         self.init_model_4_training('h_optimizer', 'h_scheduler', 'representation', 'h_step', 'h_gamma') #Hidden layer settings
         self.init_model_4_training('b_optimizer', 'b_scheduler', 'backbone', 'b_step', 'b_gamma') #Backbone layer settings
         if self.E_DB is not None:
-            self.init_model_4_training('cca_optimizer', 'cca_scheduler', 'cca', 'c_step', 'cca_gamma') #Chunked cross-attention layer settings
+            self.init_model_4_training('c_optimizer', 'c_scheduler', 'cca', 'c_step', 'c_gamma') #Chunked cross-attention layer settings
         self.init_model_4_training('v_optimizer', 'v_scheduler', 'value', 'v_step', 'v_gamma') #Value head settings
         self.init_model_4_training('p_optimizer', 'p_scheduler', 'policy', 'p_step', 'p_gamma') #Policy head settings
         self.init_model_4_training('s_optimizer', 's_scheduler', 'state', 's_step', 's_gamma') #Next state representation head settings
@@ -349,7 +357,7 @@ class Agent:
                 self.h_scheduler.step()
                 self.b_scheduler.step()
             if self.E_DB is not None:
-                self.cca_scheduler.step()
+                self.c_scheduler.step()
             self.v_scheduler.step()
             self.p_scheduler.step()
             self.r_scheduler.step()
@@ -489,16 +497,16 @@ class Agent:
         cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
         #Update chunked cross-attention layer weights
         self.total_loss['cca loss'] += cca_loss.item()
-        self.cca_optimizer.zero_grad()
+        self.c_optimizer.zero_grad()
         cca_loss.backward(
             retain_graph = True,
             inputs = list(self.m_weights['cca']['model'].parameters())
         )
         torch.nn.utils.clip_grad_norm_(
             self.m_weights['cca']['model'].parameters(),
-            self.training_settings['cca_max_norm']
+            self.training_settings['c_max_norm']
         )
-        self.cca_optimizer.step()
+        self.c_optimizer.step()
 
     def update_value_layer(self, v, v_targets):
         """
