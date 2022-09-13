@@ -254,13 +254,38 @@ class Agent:
         )
         self.m_weights[model_name][m_header].train()
 
-    def train_layer(param):
+    def train_layer(self, model_name, param, data):
         """
         Input: None
         Description: Module for training a layer of the model
         Output: None
         """
-        pass
+        if 'bsz' not in param or 'epoch' not in param:
+            raise Exception('Error - found missing parameters, "bsz" and "epoch" needed.')
+        training_function = getattr(Agent, f'train_{model_name}_layer')
+        start_time, log = time.time(), []
+        for epoch in range(param['epoch']):
+            t_steps, loss = 0, 0.
+            with tqdm(total=int(len(data) / param['bsz']) + 1, desc='Training Batch') as pbar:
+                for batch, i in enumerate(range(0, len(data), param['bsz'])):
+                    state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, param['bsz'])
+                    #Run model_specific training function
+                    training_variables = []
+                    for k in training_function.__code__.co_varnames[:training_function.__code__.co_argcount + 1]:
+                        if k == 'self': continue
+                        print(k)
+                        if k in locals():
+                            training_variables.append(locals()[k])
+                        else:
+                            v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
+                            if k in locals():
+                                training_variables.append(locals()[k])
+                    print(training_variables)
+                    training_function(*training_variables)
+                    t_steps += 1
+                    pbar.update(1)
+            print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {loss / t_steps} loss\n')
+        return log
 
     def train(self, data, folder = None, encoder = True, full_count = 1):
         """
@@ -334,21 +359,21 @@ class Agent:
                     '''
                     self.tools.multi_thread(
                         [
-                            {'name':'value', 'func':self.update_value_layer, 'args':(v, v_targets)},
-                            {'name':'policy', 'func':self.update_policy_layer, 'args':(p, p_targets)},
-                            {'name':'state', 'func':self.update_next_state_layer, 'args':(s, s_h)},
-                            {'name':'reward', 'func':self.update_reward_layer, 'args':(r, r_targets)}
+                            {'name':'value', 'func':self.train_value_layer, 'args':(v, v_targets)},
+                            {'name':'policy', 'func':self.train_policy_layer, 'args':(p, p_targets)},
+                            {'name':'state', 'func':self.train_next_state_layer, 'args':(s, s_h)},
+                            {'name':'reward', 'func':self.train_reward_layer, 'args':(r, r_targets)}
                         ],
                         workers = 2
                     )
                     '''
-                    self.update_value_layer(v, v_targets)
+                    self.train_value_layer(v, v_targets)
                     #print('val')
-                    self.update_policy_layer(p, p_targets)
+                    self.train_policy_layer(p, p_targets)
                     #print('pol')
-                    self.update_next_state_layer(s, s_h)
+                    self.train_next_state_layer(s, s_h)
                     #print('state')
-                    self.update_reward_layer(r, r_targets)
+                    self.train_reward_layer(r, r_targets)
                     #print('reward')
                     t_steps += 1
                     pbar.update(1)
@@ -508,7 +533,7 @@ class Agent:
         )
         self.c_optimizer.step()
 
-    def update_value_layer(self, v, v_targets):
+    def train_value_layer(self, v, v_targets):
         """
         Input: v - tensor representing the predicted value
                v_targets - tensor representing the value head targets
@@ -527,7 +552,7 @@ class Agent:
         )
         self.v_optimizer.step()
 
-    def update_policy_layer(self, p, p_targets):
+    def train_policy_layer(self, p, p_targets):
         """
         Input: p - tensor representing the predicted policy
                p_targets - tensor representing the value head targets
@@ -546,7 +571,7 @@ class Agent:
         )
         self.p_optimizer.step()
 
-    def update_reward_layer(self, r, r_targets):
+    def train_reward_layer(self, r, r_targets):
         """
         Input: r - tensor representing the predicted reward
                r_targets - tensor representing the reward head targets
@@ -565,7 +590,7 @@ class Agent:
         )
         self.r_optimizer.step()
 
-    def update_next_state_layer(self, s, s_h):
+    def train_next_state_layer(self, s, s_h):
         """
         Input: s - tensor representing the predicted next state representation
                s_h - tensor representing the prediction representation encodings

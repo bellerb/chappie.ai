@@ -197,6 +197,12 @@ Training layer
 '''
                 )
                 data = pd.read_csv(f'skills/chess/data/models/{player}/logs/game_log.csv')
+                agent.train_layer(
+                    layer_name,
+                    {'epoch':1, 'bsz':1},
+                    data
+                )
+                '''
                 for epoch in range(agent.training_settings['epoch']):
                     t_steps = 0 #Current training step
                     agent.total_loss = {f'{layer_name} loss':0.}
@@ -244,6 +250,7 @@ Training layer
                     'state_dict': agent.m_weights[layer_name]['model'].state_dict(),
                 }, f"skills/chess/data/models/{player}/weights/{agent.m_weights[layer_name]['param']}")
                 t_log.to_csv(f'skills/chess/data/models/{player}/logs/training_log.csv', index=False)
+                '''
             elif t_choice == 1:
                 print(
 '''

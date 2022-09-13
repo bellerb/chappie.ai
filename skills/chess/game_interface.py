@@ -88,7 +88,8 @@ class chess:
                         else:
                             print('\nBlacks Turn [LOWER CASE]\n')
                         chess_game.display()
-                    plumbing.move_count = a_players[i].move_count
+                    else:
+                        plumbing.move_count = a_players[i].move_count
                     enc_state = plumbing.encode_state(chess_game)
                     if a_players[i] == 'human':
                         while True:
@@ -183,7 +184,7 @@ class chess:
             if end == True:
                 break
         for i, p in enumerate(players):
-            if a_players[i].E_DB is not None:
+            if a_players[i] != 'human' and a_players[i].E_DB is not None:
                 new_tokens = a_players[i].tools.convert_token_2_embedding(
                     game_train_data[[h for h in game_train_data if 'state' in h]].drop_duplicates(),
                     a_players[i].m_weights['representation']['model'],
