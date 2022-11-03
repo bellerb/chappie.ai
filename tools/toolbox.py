@@ -38,15 +38,23 @@ class ToolBox:
     def get_kNN(chunks, e_db, k = 2):
         """
         Input: chunks - tensor containing initial data
-               e_db - dataframe containing embeddings
+                e_db - dataframe containing embeddings
         Description: find k-nearest-neighbours of input tensor
         Output: tensor containing the k-nearest-neighbours of input tensor
         """
+        e_db = torch.tensor(e_db[0])
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
-            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x[0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(), axis=1)
-            kNN = torch.tensor([e_db.nsmallest(k, ['L2'])[0].tolist()])
-            neighbours = torch.cat([neighbours, kNN])
+            neighbours = torch.cat(
+                [
+                    neighbours, 
+                    e_db[
+                        torch.linalg.matrix_norm(
+                            chunk - e_db[:, chunk.size(0) * i : chunk.size(0) * (i + 1)] #Compare slice with chunk
+                        ).topk(k, largest = False).indices #Index of k nearest neighbours
+                    ][None, :, :]
+                ]
+            )
         return neighbours
 
     def multi_process(func, workers = None):
