@@ -61,19 +61,17 @@ class ToolBox:
     def get_kNN(self, chunks, e_db, k = 2):
         """
         Input: chunks - tensor containing initial data
-               e_db - dataframe containing embeddings
+                e_db - dataframe containing embeddings
         Description: find k-nearest-neighbours of input tensor
         Output: tensor containing the k-nearest-neighbours of input tensor
         """
+        e_db = torch.tensor(e_db[0])
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
-            e_db['L2'] = e_db.apply(
-                lambda x:torch.linalg.norm(chunk - torch.tensor(x['encoding'][0][chunk.size(0) * i:chunk.size(0) * (i + 1)]).to(torch.float)).item(),
-                axis=1
-            )
-            kNN = torch.tensor([e_db.nsmallest(k, ['L2'])['encoding'].tolist()])
+            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x[0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(), axis=1)
+            kNN = torch.tensor([e_db.nsmallest(k, ['L2'])[0].tolist()])
             neighbours = torch.cat([neighbours, kNN])
-        return neighbours.to(torch.float)
+        return neighbours
 
     def multi_process(self, func, workers = None):
         """
