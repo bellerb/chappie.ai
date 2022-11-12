@@ -277,15 +277,11 @@ class Agent:
         for epoch in range(param['epoch']):
             t_steps, loss = 0, 0.
             with tqdm(total=int(len(data) / param['bsz']) + 1, desc='Training Batch') as pbar:
-                #print(len(data), param['bsz'])
                 for batch, i in enumerate(range(0, len(data), param['bsz'])):
-                    #print(data)
                     state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, param['bsz'])
-                    #print('atarge',a_targets.size(),s_targets.size())
                     #Run model_specific training function
                     training_variables = [self]
                     for k in training_function.__code__.co_varnames[:training_function.__code__.co_argcount]:
-                        #print(k)
                         if k == 'self': continue
                         if k in locals():
                             training_variables.append(locals()[k])
@@ -293,7 +289,6 @@ class Agent:
                             v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
                             if k in locals():
                                 training_variables.append(locals()[k])
-                        #print(f'k = {locals()[k].size()}')
                     training_function(*training_variables)
                     t_steps += 1
                     pbar.update(1)
@@ -351,56 +346,17 @@ class Agent:
                 for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
                     state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, self.training_settings['bsz']) #Get batch data with the selected targets being masked
                     if epoch <= full_count - 1 and encoder is True:
-                        '''
-                        #Train trunk of model
-                        if self.E_DB is not None:
-                            self.tools.multi_thread(
-                                [
-                                    {'name':'representation', 'func':self.train_representation_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)},
-                                    {'name':'cca', 'func':self.train_cca_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)},
-                                    {'name':'backbone', 'func':self.train_backbone_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)}
-                                ],
-                                workers = 2
-                            )
-                        else:
-                            self.tools.multi_thread(
-                                [
-                                    {'name':'representation', 'func':self.train_representation_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)},
-                                    {'name':'backbone', 'func':self.train_backbone_layer, 'args':(state, a_targets, s_targets, v_targets, p_targets, r_targets)}
-                                ],
-                                workers = 2
-                            )
-                        '''
                         #Train trunk of model
                         self.train_representation_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                        #print('rep')
                         self.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                        #print('back')
                     if self.E_DB is not None:
                         self.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                        #print('cca')
-
                     #Train heads of model
                     v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
-                    '''
-                    self.tools.multi_thread(
-                        [
-                            {'name':'value', 'func':self.train_value_layer, 'args':(v, v_targets)},
-                            {'name':'policy', 'func':self.train_policy_layer, 'args':(p, p_targets)},
-                            {'name':'state', 'func':self.train_next_state_layer, 'args':(s, s_h)},
-                            {'name':'reward', 'func':self.train_reward_layer, 'args':(r, r_targets)}
-                        ],
-                        workers = 2
-                    )
-                    '''
                     self.train_value_layer(v, v_targets)
-                    #print('val')
                     self.train_policy_layer(p, p_targets)
-                    #print('pol')
                     self.train_state_layer(s, s_h)
-                    #print('state')
                     self.train_reward_layer(r, r_targets)
-                    #print('reward')
                     t_steps += 1
                     pbar.update(1)
             #Learning rate decay
@@ -442,7 +398,6 @@ class Agent:
         """
         #Model trunk
         h = self.m_weights['representation']['model'](state)
-        #print("AAAAA",h.size(),a_targets.size(),state.size())
         d = self.m_weights['backbone']['model'](h, a_targets)
         if self.E_DB is not None:
             d_hold = torch.tensor([])
@@ -480,7 +435,6 @@ class Agent:
         Description: updating of the representation layers weights
         Output: None
         """
-        #print(f'self = {self}')
         v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
         v_loss = self.mse(v, v_targets) #Apply loss function to results
         p_loss = self.bce(p, p_targets) #Apply loss function to results
@@ -686,8 +640,6 @@ class Agent:
         v = source[v_headers].iloc[x:x+y]
         r = source[r_headers].iloc[x:x+y]
         a = source[a_headers].iloc[x:x+y] + 1
-
-        #print("ACTION",x, y)
 
         a_0 = pd.DataFrame([{a_h:0} for _ in range(len(a))])
 

@@ -259,7 +259,6 @@ class Chess:
             if part * self.p_move > 0 and part != 0:
                 p_name = self.parts[int(part) if part > 0 else int(part)*(-1)] #Get name of part
                 v_moves = getattr(Chess, p_name).movement(self, self.p_move, cur_pos, capture=True)
-                #print(v_moves) 
                 if len(self.log) > 0 and '+' in self.log[-1]:
                     v_moves = [m for m in v_moves if cur_pos in self.c_escape and m in self.c_escape[cur_pos]]
                 if next_pos in v_moves:
@@ -327,7 +326,6 @@ class Chess:
                 if True not in [True for k in i_moves if k_pos[0] in i_moves[k]]: #Check if moved king still in check
                     #if len(self.log) > 0 and self.log[-1][-1] is not '+':
                         #self.log[-1] += '+' #Check
-                        #print(m,f'{self.x[m[0][0]]}{self.y[m[0][1]]}', f'{self.x[m[1][0]]}{self.y[m[1][1]]}')
                     if m[0] in self.c_escape:
                         self.c_escape[m[0]].append(m[1])
                     else:
@@ -343,8 +341,6 @@ class Chess:
                     if True not in [True for k in i_moves if m in i_moves[k]]: #Check if moved king still in check
                         #if len(self.log) > 0 and self.log[-1][-1] is not '+':
                             #self.log[-1] += '+' #Check
-                            #print(m)
-                            #print(k_pos[0],m,f'{self.x[k_pos[0][0]]}{self.y[k_pos[0][1]]}', f'{self.x[m[0]]}{self.y[m[1]]}')
                         if k_pos[0] in self.c_escape:
                             self.c_escape[k_pos[0]].append(m)
                         else:

@@ -113,7 +113,6 @@ class MCTS:
             U *= self.c1 + (math.log((p_visits + (self.action_space * self.c2) + self.action_space) / self.c2)) #Second part of exploration
             Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
             u_bank[a] = Q_n + U
-        #print(u_bank)
         m_u = max(u_bank.values())
         a_bank = [k for k,v in u_bank.items() if v == m_u]
         return random.choice(a_bank)
