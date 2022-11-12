@@ -1,5 +1,7 @@
 from time import sleep
-from os import listdir
+from os import listdir, makedirs
+
+import numpy as np
 
 import torch
 import pandas as pd
@@ -58,19 +60,29 @@ class ToolBox:
             e_db = None
         return e_db
 
-    def get_kNN(self, chunks, e_db, k = 2):
+    def get_kNN(self, chunks, e_db, k = 2, header = 'encoding'):
         """
         Input: chunks - tensor containing initial data
                 e_db - dataframe containing embeddings
+                k - integer representing the amount of neighbours to get (default = 2) [OPTIONAL]
+                header - string representing the name of the encoding header of our e_db (default = encoding) [OPTIONAL]
         Description: find k-nearest-neighbours of input tensor
         Output: tensor containing the k-nearest-neighbours of input tensor
         """
-        e_db = torch.tensor(e_db[0])
+        e_db = torch.squeeze(torch.tensor(np.concatenate( e_db[header], axis=0 )))
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
-            e_db['L2'] = e_db.apply(lambda x:torch.linalg.norm(chunk - torch.tensor(x[0][chunk.size(0) * i:chunk.size(0) * (i + 1)])).item(), axis=1)
-            kNN = torch.tensor([e_db.nsmallest(k, ['L2'])[0].tolist()])
-            neighbours = torch.cat([neighbours, kNN])
+            #print(e_db, chunks.size(), chunk.size(), e_db.size(), e_db[:, chunk.size(0) * i : chunk.size(0) * (i + 1)].size())
+            neighbours = torch.cat(
+                [
+                    neighbours, 
+                    e_db[
+                        torch.linalg.matrix_norm(
+                            chunk - e_db[:, chunk.size(0) * i : chunk.size(0) * (i + 1)] #Compare slice with chunk
+                        ).topk(k, largest = False).indices #Index of k nearest neighbours
+                    ][None, :, :]
+                ]
+            )
         return neighbours
 
     def multi_process(self, func, workers = None):
@@ -118,7 +130,7 @@ class ToolBox:
         """
         if exists(p1):
             if exists(p2) is False:
-                os.makedirs(p2) #Create folder
+                makedirs(p2) #Create folder
             for i, m in enumerate(listdir(p1)):
                 copyfile(
                     f"{p1}/{m}",

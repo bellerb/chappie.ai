@@ -108,7 +108,7 @@ Starting game...
                 g_log = pd.read_csv(f'{player}/logs/game_log(human).csv')
             else:
                 g_log = pd.DataFrame()
-            g_log = g_log.append(log, ignore_index=True)
+            g_log = pd.concat([g_log, log], ignore_index=True)
             g_log.to_csv(f'{player}/logs/game_log(human).csv', index=False)
         #TRAIN CHESS ---------------------------------------
         elif task == 1:
@@ -197,45 +197,16 @@ Training layer
 '''
                 )
                 data = pd.read_csv(f'skills/chess/data/models/{player}/logs/game_log.csv')
+                print(f'original training data size = {len(data)}')
+                data = data.iloc[-10000:]
+                print(f'training data size reduced to = {len(data)}\n')
                 agent.train_layer(
                     layer_name,
                     {'epoch':1, 'bsz':1},
                     data
                 )
                 '''
-                for epoch in range(agent.training_settings['epoch']):
-                    t_steps = 0 #Current training step
-                    agent.total_loss = {f'{layer_name} loss':0.}
-                    with tqdm(total=int(len(data) / agent.training_settings['bsz']) + 1, desc='Training Batch') as pbar:
-                        for batch, i in enumerate(range(0, len(data), agent.training_settings['bsz'])):
-                            state, s_targets, p_targets, v_targets, r_targets, a_targets = agent.get_batch(data, i, agent.training_settings['bsz']) #Get batch data with the selected targets being masked
-                            if 'Representation' in layer_list[l_choice]:
-                                agent.train_representation_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                                agent.h_scheduler.step()
-                            if 'Backbone' in layer_list[l_choice]:
-                                agent.train_backbone_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                                agent.b_scheduler.step()
-                            if 'Cca' in layer_list[l_choice]:
-                                agent.train_cca_layer(state, a_targets, s_targets, v_targets, p_targets, r_targets)
-                                agent.c_scheduler.step()
-                            if 'Representation' not in layer_list[l_choice] and 'Backbone' not in layer_list[l_choice] and 'Cca' not in layer_list[l_choice]:
-                                v, p, r, s, s_h = agent.forward_pass(state, a_targets, s_targets)
-                            if 'Value' in layer_list[l_choice]:
-                                agent.update_value_layer(v, v_targets)
-                                agent.v_scheduler.step()
-                            if 'Policy' in layer_list[l_choice]:
-                                agent.update_policy_layer(p, p_targets)
-                                agent.p_scheduler.step()
-                            if 'State' in layer_list[l_choice]:
-                                agent.update_next_state_layer(s, s_h)
-                                agent.s_scheduler.step()
-                            if 'Reward' in layer_list[l_choice]:
-                                agent.update_reward_layer(r, r_targets)
-                                agent.r_scheduler.step()
-                            t_steps += 1
-                            pbar.update(1)
-                    print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {"| ".join(f"{v/t_steps} {k}" for k, v in agent.total_loss.items())}\n')
-                    t_log = t_log.append({
+                t_log = t_log.append({
                         **{
                             'Date':datetime.now(),
                             'Epoch':epoch,
@@ -359,10 +330,17 @@ Starting games...
                                 game_num = 674,
                                 #game_max = 200
                             )
+                            '''
                             t_results = t_results.append({
                                 'white':players[0],
                                 'black':players[1],
                                 'state':state
                             },ignore_index=True)
+                            '''
+                            t_results = pd.concat([t_results, {
+                                'white':players[0],
+                                'black':players[1],
+                                'state':state
+                            }], ignore_index=True)
                 print(t_results)
                 t_results.to_csv('tournament_results.csv', index=False)

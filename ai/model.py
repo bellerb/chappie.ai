@@ -122,9 +122,10 @@ class Attention(nn.Module):
         else:
             k, v = map(
                 lambda x:rearrange(x, 'b y (h x) -> (b h) y x', h = self.heads),
-                (self.K(context), self.V(context))
+                (self.K(context.float()), self.V(context.float()))
             )
         #b:batches, y:y-axis, q:q x-axis, k: k x-axis
+        print(q.size(),k.size(),torch.einsum('b q y, b k y -> b k q', q, k).size())
         z = torch.einsum('b q y, b k y -> b k q', q, k) / (x.size(-1) ** (0.5)) #Scaled dot-product [QK.T/sqrt(dk)]
 
         if mask is not None:

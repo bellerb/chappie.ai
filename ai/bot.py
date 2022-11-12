@@ -10,6 +10,9 @@ import numpy as np
 import pandas as pd
 from einops import rearrange
 
+from collections import deque
+from io import StringIO
+
 from ai.search import MCTS
 from tools.toolbox import ToolBox
 from ai.model import Representation, Backbone, Head, ChunkedCrossAttention
@@ -164,11 +167,14 @@ class Agent:
         #self.single_player = m_param['search']['single_player']
         self.tools = ToolBox()
         if p_model['retro'] is True:
-            if os.path.exists(f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/encoded_data.csv".replace('(temp)','')):
-                self.E_DB = pd.read_csv(f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/encoded_data.csv".replace('(temp)',''))
+            MAX_EDB = m_param['search']['max_embedding_data'] #Max amount of embeddings to use in CCA
+            e_db_file_name = f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/encoded_data.csv".replace('(temp)','')
+            if os.path.exists(e_db_file_name):
+                with open(e_db_file_name) as f:
+                    q = deque(f, MAX_EDB)
+                self.E_DB = pd.read_csv(StringIO('\n'.join(q)), names=['encoding', 'state'])
                 self.E_DB['state'] = self.E_DB['state'].apply(eval).apply(np.array)
                 self.E_DB['encoding'] = self.E_DB['encoding'].apply(eval).apply(np.array)
-                #print(self.E_DB['encoding'].iloc[0])
             else:
                 self.E_DB = self.tools.build_embedding_db(
                     representation,
@@ -176,8 +182,11 @@ class Agent:
                     f_name = f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/game_log.csv".replace('(temp)','')
                 )
                 self.E_DB.to_csv(f"{'/'.join(s for s in param_name.split('/')[:-1])}/logs/encoded_data.csv".replace('(temp)',''), index=False)
+                self.E_DB = self.E_DB.iloc[-MAX_EDB:]
         else:
             self.E_DB = None
+        self.total_loss = {}
+        torch.autograd.set_detect_anomaly(True)
 
     def choose_action(self, state, legal_moves = None):
         """
@@ -256,9 +265,11 @@ class Agent:
 
     def train_layer(self, model_name, param, data):
         """
-        Input: None
+        Input: model_name - string representing the name of the model to load
+               param - dictionary containing training parameters
+               data - dataframe containing training data
         Description: Module for training a layer of the model
-        Output: None
+        Output: list containing the training log
         """
         if 'bsz' not in param or 'epoch' not in param:
             raise Exception('Error - found missing parameters, "bsz" and "epoch" needed.')
@@ -267,23 +278,31 @@ class Agent:
         for epoch in range(param['epoch']):
             t_steps, loss = 0, 0.
             with tqdm(total=int(len(data) / param['bsz']) + 1, desc='Training Batch') as pbar:
+                print(len(data), param['bsz'])
                 for batch, i in enumerate(range(0, len(data), param['bsz'])):
+                    #print(data)
                     state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, param['bsz'])
+                    #print('atarge',a_targets.size(),s_targets.size())
                     #Run model_specific training function
-                    training_variables = []
-                    for k in training_function.__code__.co_varnames[:training_function.__code__.co_argcount + 1]:
+                    training_variables = [self]
+                    for k in training_function.__code__.co_varnames[:training_function.__code__.co_argcount]:
+                        #print(k)
                         if k == 'self': continue
-                        print(k)
                         if k in locals():
                             training_variables.append(locals()[k])
                         else:
                             v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
                             if k in locals():
                                 training_variables.append(locals()[k])
-                    print(training_variables)
                     training_function(*training_variables)
                     t_steps += 1
                     pbar.update(1)
+                    #Garbedge clean up 
+                    if 'v' in locals(): del v
+                    if 'p' in locals(): del p
+                    if 'r' in locals(): del r
+                    if 's' in locals(): del s
+                    if 's_h' in locals(): del s_h
             print(f'EPOCH {epoch} | {time.time() - start_time} ms | {len(data)} samples | {loss / t_steps} loss\n')
         return log
 
@@ -371,7 +390,7 @@ class Agent:
                     #print('val')
                     self.train_policy_layer(p, p_targets)
                     #print('pol')
-                    self.train_next_state_layer(s, s_h)
+                    self.train_state_layer(s, s_h)
                     #print('state')
                     self.train_reward_layer(r, r_targets)
                     #print('reward')
@@ -453,6 +472,7 @@ class Agent:
         Description: updating of the representation layers weights
         Output: None
         """
+        #print(f'self = {self}')
         v, p, r, s, s_h = self.forward_pass(state, a_targets, s_targets)
         v_loss = self.mse(v, v_targets) #Apply loss function to results
         p_loss = self.bce(p, p_targets) #Apply loss function to results
@@ -461,7 +481,10 @@ class Agent:
         h_loss = v_loss.clone() + p_loss.clone() + r_loss.clone()
         #Update hidden layer weights
         self.h_optimizer.zero_grad()
-        self.total_loss['representation loss'] += h_loss.item()
+        if 'representation loss' in self.total_loss:
+            self.total_loss['representation loss'] += h_loss.item()
+        else:
+            self.total_loss['representation loss'] = h_loss.item()
         h_loss.backward(
             retain_graph = True,
             inputs = list(self.m_weights['representation']['model'].parameters())
@@ -484,14 +507,17 @@ class Agent:
         Output: None
         """
         h_0 = self.m_weights['representation']['model'](state[:len(s_targets)])
+        print("AAA",h_0.size(), a_targets.size())
         d_0 = self.m_weights['backbone']['model'](h_0, a_targets[len(s_targets):])
 
         h_1 = self.m_weights['representation']['model'](s_targets)
         d_1 = self.m_weights['backbone']['model'](h_1, torch.tensor([[0]] * len(s_targets)))
 
         d_loss = self.mse(d_0, d_1) #Apply loss function to results
-
-        self.total_loss['backbone loss'] += d_loss.item()
+        if 'backbone loss' in self.total_loss:
+            self.total_loss['backbone loss'] += d_loss.item()
+        else:
+            self.total_loss['backbone loss'] = d_loss.item()
         self.b_optimizer.zero_grad()
         d_loss.backward(
             retain_graph = True,
@@ -521,7 +547,10 @@ class Agent:
         s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
         cca_loss = v_loss.clone() + p_loss.clone() + r_loss.clone() + s_loss.clone()
         #Update chunked cross-attention layer weights
-        self.total_loss['cca loss'] += cca_loss.item()
+        if 'cca loss' in self.total_loss:
+            self.total_loss['cca loss'] += cca_loss.item()
+        else:
+            self.total_loss['cca loss'] = cca_loss.item()
         self.c_optimizer.zero_grad()
         cca_loss.backward(
             retain_graph = True,
@@ -541,9 +570,13 @@ class Agent:
         Output: None
         """
         v_loss = self.mse(v, v_targets) #Apply loss function to results
-        self.total_loss['value loss'] += v_loss.item()
+        if 'value loss' in self.total_loss:
+            self.total_loss['value loss'] += v_loss.item()
+        else:
+            self.total_loss['value loss'] = v_loss.item()
         self.v_optimizer.zero_grad()
         v_loss.backward(
+            retain_graph = True,
             inputs = list(self.m_weights['value']['model'].parameters())
         )
         torch.nn.utils.clip_grad_norm_(
@@ -560,9 +593,13 @@ class Agent:
         Output: None
         """
         p_loss = self.bce(p, p_targets) #Apply loss function to results
-        self.total_loss['policy loss'] += p_loss.item()
+        if 'policy loss' in self.total_loss:
+            self.total_loss['policy loss'] += p_loss.item()
+        else:
+            self.total_loss['policy loss'] = p_loss.item()
         self.p_optimizer.zero_grad()
         p_loss.backward(
+            retain_graph = True,
             inputs = list(self.m_weights['policy']['model'].parameters())
         )
         torch.nn.utils.clip_grad_norm_(
@@ -579,9 +616,13 @@ class Agent:
         Output: None
         """
         r_loss = self.mse(r, r_targets) #Apply loss function to results
-        self.total_loss['reward loss'] += r_loss.item()
+        if 'reward loss' in self.total_loss:
+            self.total_loss['reward loss'] += r_loss.item()
+        else:
+            self.total_loss['reward loss'] = r_loss.item()
         self.r_optimizer.zero_grad()
         r_loss.backward(
+            retain_graph = True,
             inputs = list(self.m_weights['reward']['model'].parameters())
         )
         torch.nn.utils.clip_grad_norm_(
@@ -590,7 +631,7 @@ class Agent:
         )
         self.r_optimizer.step()
 
-    def train_next_state_layer(self, s, s_h):
+    def train_state_layer(self, s, s_h):
         """
         Input: s - tensor representing the predicted next state representation
                s_h - tensor representing the prediction representation encodings
@@ -598,9 +639,13 @@ class Agent:
         Output: None
         """
         s_loss = self.mse(s[:len(s_h)], s_h) #Apply loss function to results
-        self.total_loss['state loss'] += s_loss.item()
+        if 'state loss' in self.total_loss:
+            self.total_loss['state loss'] += s_loss.item()
+        else:
+            self.total_loss['state loss'] = s_loss.item()
         self.s_optimizer.zero_grad()
         s_loss.backward(
+            retain_graph = True,
             inputs = list(self.m_weights['state']['model'].parameters())
         )
         torch.nn.utils.clip_grad_norm_(
@@ -633,6 +678,8 @@ class Agent:
         r = source[r_headers].iloc[x:x+y]
         a = source[a_headers].iloc[x:x+y] + 1
 
+        print("ACTION",x, y)
+
         a_0 = pd.DataFrame([{a_h:0} for _ in range(len(a))])
 
         s_1 = source[s_headers].shift(periods = -1, axis = 0).iloc[x:x+y]
@@ -654,23 +701,23 @@ class Agent:
         if True in r_1.iloc[-1].isna().tolist():
             r_1.iloc[-1] = r.iloc[-1]
 
-        state = s.append(s, ignore_index = True)
+        state = pd.concat([s, s], ignore_index=True)
         state = torch.tensor(state.values)
 
-        #s_target = s_1.append(s_1, ignore_index = True)
-        s_target = s_1
+        s_target = pd.concat([s_1, s_1], ignore_index=True)
         s_target = torch.tensor(s_target.values)
 
-        p_target = p.append(p_1, ignore_index = True)
+        p_target = pd.concat([p, p_1], ignore_index=True)
         p_target = torch.tensor(p_target.values)
 
-        v_target = v.append(v_1, ignore_index = True)
+        v_target = pd.concat([v, v_1], ignore_index=True)
         v_target = torch.tensor(v_target.values)
 
-        r_target = r.append(r_1, ignore_index = True)
+        r_target = pd.concat([r, r_1], ignore_index = True)
         r_target = torch.tensor(r_target.values)
 
-        a_target = a_0.append(a, ignore_index = True)
+        a_target = pd.concat([a_0, a], ignore_index = True)
+        #a_target = a_0.append(a, ignore_index = True)
         a_target = torch.tensor(a_target.values)
         return (
             state.to(torch.int64),

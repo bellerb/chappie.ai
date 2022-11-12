@@ -192,7 +192,8 @@ class chess:
                 )
                 #new_tokens['state'] = new_tokens['state'].apply(lambda x: x if isinstance(x, list) else x.tolist())
                 #new_tokens['encoding'] = new_tokens['encoding'].apply(lambda x: x if isinstance(x, list) else x.tolist())
-                a_players[i].E_DB = a_players[i].E_DB.append(new_tokens, ignore_index=True)
+                #a_players[i].E_DB = a_players[i].E_DB.append(new_tokens, ignore_index=True)
+                a_players[i].E_DB = pd.concat([a_players[i].E_DB, new_tokens], ignore_index = True)
                 a_players[i].E_DB['state'] = a_players[i].E_DB['state'].apply(lambda x: x if isinstance(x, list) else x.tolist())
                 a_players[i].E_DB['encoding'] = a_players[i].E_DB['encoding'].apply(lambda x: x if isinstance(x, list) else x.tolist())
                 a_players[i].E_DB.to_csv(f"{'/'.join(p.split('/')[:-1]).replace('(temp)', '')}/logs/encoded_data.csv", index=False)
@@ -237,7 +238,7 @@ class chess:
             t_log = pd.DataFrame()
         n_player = player + '(temp)'
         if os.path.exists(n_player) == False:
-            print('CREATE NEW')
+            print('CREATE NEW TEMP PLAYER')
             os.makedirs(n_player) #Create folder
             copyfile(f'{player}/parameters.json', f'{n_player}/parameters.json') #Overwrite active model with new model
             if os.path.exists(f'{n_player}/parameters.json'):
@@ -353,7 +354,7 @@ class chess:
                         #print(cur_ELO, ELO, b_elo)
                     train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
                     train_data['Date'] = [datetime.now()] * len(train_data)
-                    g_log = g_log.append(train_data, ignore_index=True)
+                    g_log = pd.concat([g_log, train_data], ignore_index=True)
                     if os.path.exists(f'{player}/logs') == False:
                         os.makedirs(f'{player}/logs') #Create folder
                     g_log.to_csv(f'{player}/logs/game_log.csv', index=False)
@@ -380,7 +381,7 @@ class chess:
                         else:
                             t_log = pd.DataFrame()
                         m_log['model'] = player
-                        t_log = t_log.append(m_log, ignore_index=True)
+                        t_log = pd.concat([t_log, m_log], ignore_index=True)
                         del m_log
                         t_log.to_csv(f'{player}/logs/training_log.csv', index=False)
                         del t_log
