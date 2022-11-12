@@ -275,7 +275,7 @@ class Agent:
         training_function = getattr(Agent, f'train_{layer_name}_layer')
         start_time, log = time.time(), []
         for epoch in range(param['epoch']):
-            t_steps, loss = 0, 0.
+            t_steps, self.total_loss[f"{layer_name} loss"] = 0, 0.
             with tqdm(total=int(len(data) / param['bsz']) + 1, desc='Training Batch') as pbar:
                 for batch, i in enumerate(range(0, len(data), param['bsz'])):
                     state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(data, i, param['bsz'])
