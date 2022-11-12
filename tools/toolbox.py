@@ -1,6 +1,9 @@
 from time import sleep
 from os import listdir, makedirs
 
+from collections import deque
+from io import StringIO
+
 import numpy as np
 
 import torch
@@ -15,6 +18,27 @@ class ToolBox:
     """
     The ToolBox is a class containing miscellaneous functions used throughout the agent
     """
+
+    def read_n_from_bottom_csv(self, file_name, n, headers = None):
+        """
+        Input: file_name - string representing the name of the file
+               n - integer representing the amount of rows to get from the bottom
+               headers - list of strings representing the files headers (default = None) [OPTIONAL]
+        Description: reads n rows from the bottom of a csv file efficently
+        Output: dataframe containing csv data
+        """
+        with open(file_name) as f:
+            q = deque(f, n)
+        if headers is not None:
+            return pd.read_csv(
+                StringIO('\n'.join(q)), 
+                names = headers
+            )
+        else:
+            return pd.read_csv(
+                StringIO('\n'.join(q)), 
+                header = None
+            )
 
     def convert_token_2_embedding(self, t_db, representation, backbone):
         """
@@ -72,7 +96,6 @@ class ToolBox:
         e_db = torch.squeeze(torch.tensor(np.concatenate( e_db[header], axis=0 )))
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
-            #print(e_db, chunks.size(), chunk.size(), e_db.size(), e_db[:, chunk.size(0) * i : chunk.size(0) * (i + 1)].size())
             neighbours = torch.cat(
                 [
                     neighbours, 
@@ -153,11 +176,11 @@ class ToolBox:
                     break
             if choice == -1:
                 print(
-    '''
-    -------------------------------------------------
-     Invalid option, plase select an option.
-    -------------------------------------------------
-    '''
+'''
+-------------------------------------------------
+    Invalid option, plase select an option.
+-------------------------------------------------
+'''
                 )
             else:
                 break

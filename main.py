@@ -30,7 +30,7 @@ if __name__ == '__main__':
 '''
     )
     o_bank = [
-        'Chess (c)'
+        'Chess                 (c)'
     ]
     task = tools.give_options(o_bank)
     if task == 0:
@@ -43,9 +43,9 @@ if __name__ == '__main__':
 '''
         )
         c_tasks = [
-            'Play     (p)',
-            'Train    (t)',
-            'Evaluate (e)'
+            'Play                  (p)',
+            'Train                 (t)',
+            'Evaluate              (e)'
         ]
         task = tools.give_options(c_tasks)
         i = 0
@@ -65,7 +65,10 @@ if __name__ == '__main__':
 '''
             )
             players = ['human']
-            col_choice = ['White (w)','Black (b)']
+            col_choice = [
+                'White                 (w)',
+                'Black                 (b)'
+            ]
             p_col = tools.give_options(col_choice)
             print(
 '''
@@ -139,11 +142,16 @@ Which model would you like to train?
                         model_list.append(f'{m} ({i})')
                         i += 1
                 m_choice = tools.give_options(model_list)
+                print()
                 player = model_list[m_choice].split("(")[0].strip()
-                agent = Agent(
-                    param_name = f'skills/chess/data/models/{player}/parameters.json',
-                    train = False
-                )
+                with tqdm(total=10, desc=f'Loading model {player}') as pbar:
+                    pbar.update(5)
+                    pbar.refresh()
+                    agent = Agent(
+                        param_name = f'skills/chess/data/models/{player}/parameters.json',
+                        train = False
+                    )
+                    pbar.update(5)
                 print(
 '''
 -------------------------------------------------
@@ -152,76 +160,160 @@ Which layer do you want to train?
 '''
                 )
                 layer_list = [
-                    'Representation (h)',
-                    'Backbone       (b)'
+                    'Representation        (h)',
+                    'Backbone              (b)'
                 ]
                 if agent.E_DB is not None:
-                    layer_list.append('Cca            (c)')
+                    layer_list.append('Cca                   (c)')
                 layer_list += [
-                    'Value          (v)',
-                    'Policy         (p)',
-                    'State          (s)',
-                    'Reward         (r)'
+                    'Value                 (v)',
+                    'Policy                (p)',
+                    'State                 (s)',
+                    'Reward                (r)'
                 ]
                 l_choice = tools.give_options(layer_list)
-                if 'Representation' in layer_list[l_choice] or 'Backbone' in layer_list[l_choice] or 'Cca' in layer_list[l_choice]:
-                    agent.mse = torch.nn.MSELoss() #Mean squared error loss
-                    agent.bce = torch.nn.BCELoss() #Binary cross entropy loss
-                elif 'Policy' not in layer_list[l_choice]:
-                    agent.mse = torch.nn.MSELoss() #Mean squared error loss
-                else:
-                    agent.bce = torch.nn.BCELoss() #Binary cross entropy loss
-                #Load model weights
-                for l in layer_list:
-                    longform_layer, shortform_layer = l.split('(')
-                    longform_layer = longform_layer.strip().lower()
-                    shortform_layer = shortform_layer.replace(')', '').strip()
-                    agent.init_model_4_training(
-                        f'{shortform_layer}_optimizer',
-                        f'{shortform_layer}_scheduler',
-                        longform_layer,
-                        f'{shortform_layer}_step',
-                        f'{shortform_layer}_gamma'
-                    )
-                if os.path.exists(f'{player}/logs/training_log.csv'):
-                    t_log = pd.read_csv(f'{player}/logs/training_log.csv')
-                else:
-                    t_log = pd.DataFrame()
-                start_time = time.time() #Get time of starting process
+                print()
                 layer_name = layer_list[l_choice].split("(")[0].strip().lower()
+                with tqdm(total=len(layer_list) + 2, desc=f'Loading {layer_name} layer') as pbar:
+                    if 'Representation' in layer_list[l_choice] or 'Backbone' in layer_list[l_choice] or 'Cca' in layer_list[l_choice]:
+                        agent.mse = torch.nn.MSELoss() #Mean squared error loss
+                        agent.bce = torch.nn.BCELoss() #Binary cross entropy loss
+                    elif 'Policy' not in layer_list[l_choice]:
+                        agent.mse = torch.nn.MSELoss() #Mean squared error loss
+                    else:
+                        agent.bce = torch.nn.BCELoss() #Binary cross entropy loss
+                    pbar.update(1)
+                    pbar.refresh()
+                    #Load model weights
+                    for l in layer_list:
+                        longform_layer, shortform_layer = l.split('(')
+                        longform_layer = longform_layer.strip().lower()
+                        shortform_layer = shortform_layer.replace(')', '').strip()
+                        agent.init_model_4_training(
+                            f'{shortform_layer}_optimizer',
+                            f'{shortform_layer}_scheduler',
+                            longform_layer,
+                            f'{shortform_layer}_step',
+                            f'{shortform_layer}_gamma'
+                        )
+                        pbar.update(1)
+                        pbar.refresh()
+                    start_time = time.time() #Get time of starting process
+                    with open(f'skills/chess/data/models/{player}/logs/game_log.csv') as f:
+                        data_header = f.readline().split(',')
+                        data_size = sum(1 for _ in f)
+                    pbar.update(1)
+                    pbar.refresh()
                 print(
-'''
+f'''
 -------------------------------------------------
-Training layer
+Would you like to use train on all the data?
+Original data size: {data_size}
 -------------------------------------------------
 '''
                 )
-                data = pd.read_csv(f'skills/chess/data/models/{player}/logs/game_log.csv')
-                print(f'original training data size = {len(data)}')
-                data = data.iloc[-10000:]
-                print(f'training data size reduced to = {len(data)}\n')
-                agent.train_layer(
+                training_size_list = [
+                    'Yes                   (y)',
+                    'No                    (n)',
+                ]
+                s_choice = tools.give_options(training_size_list)
+                if (s_choice == 0):
+                    data = pd.read_csv(f'skills/chess/data/models/{player}/logs/game_log.csv')
+                elif (s_choice == 1): 
+                    data_reduction = input(
+'''
+-------------------------------------------------
+How much training data do you wish to use?
+-------------------------------------------------\n
+'''
+                    )
+                    while True:
+                        try:
+                            data_reduction = int(data_reduction)
+                            break
+                        except:
+                            data_reduction = input(
+'''
+-------------------------------------------------
+Sorry invalid input [integer]
+-------------------------------------------------\n
+'''
+                            )
+                    data = tools.read_n_from_bottom_csv(
+                        f'skills/chess/data/models/{player}/logs/game_log.csv', 
+                        data_reduction, 
+                        headers = data_header
+                    )
+                    print(f'\nTraining data size reduced to: {len(data)}\n')
+                EPOCHS = input(
+'''
+-------------------------------------------------
+How many EPOCHs do you wish to run?
+-------------------------------------------------\n
+'''
+                )
+                while True:
+                    try:
+                        EPOCHS = int(EPOCHS)
+                        break
+                    except:
+                        EPOCHS = input(
+'''
+-------------------------------------------------
+Sorry invalid input [integer]
+-------------------------------------------------\n
+'''
+                        )
+                BSZ = input(
+'''
+-------------------------------------------------
+What batch size do you wish to use?
+-------------------------------------------------\n
+'''
+                )
+                while True:
+                    try:
+                        BSZ = int(BSZ)
+                        break
+                    except:
+                        BSZ = input(
+'''
+-------------------------------------------------
+Sorry invalid input [integer]
+-------------------------------------------------\n
+'''
+                        )
+                print(
+f'''
+-------------------------------------------------
+Beginning Training
+=================================================
+method:           {t_methods[t_choice].split(" ")[0].strip().lower()}
+model:            {player}
+layer:            {layer_name}
+sample size:      {len(data)}
+epochs:           {EPOCHS}
+batch size:       {BSZ}
+-------------------------------------------------
+'''
+                )
+                log = agent.train_layer(
                     layer_name,
-                    {'epoch':1, 'bsz':1},
+                    {'epoch':EPOCHS, 'bsz':BSZ},
                     data
                 )
-                '''
-                t_log = t_log.append({
-                        **{
-                            'Date':datetime.now(),
-                            'Epoch':epoch,
-                            'Samples':len(data),
-                            'Time':time.time() - start_time
-                        },
-                        **{k:(v / t_steps) for k, v in agent.total_loss.items()}
-                    }, ignore_index=True)
+                del data
                 if os.path.exists(f'skills/chess/data/models/{player}/weights') is False:
                     os.makedirs(f'skills/chess/data/models/{player}/weights') #Create folder
                 torch.save({
                     'state_dict': agent.m_weights[layer_name]['model'].state_dict(),
                 }, f"skills/chess/data/models/{player}/weights/{agent.m_weights[layer_name]['param']}")
+                if os.path.exists(f'{player}/logs/training_log.csv'):
+                    t_log = pd.read_csv(f'{player}/logs/training_log.csv')
+                else:
+                    t_log = pd.DataFrame()
+                t_log = pd.concat([t_log, pd.DataFrame(log)], ignore_index=True)
                 t_log.to_csv(f'skills/chess/data/models/{player}/logs/training_log.csv', index=False)
-                '''
             elif t_choice == 1:
                 print(
 '''

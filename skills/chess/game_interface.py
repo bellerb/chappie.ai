@@ -351,7 +351,6 @@ class chess:
                             tie = True if state == [0, 0, 0] else False
                         )
                         train_data['ELO'] = [ELO[b_elo]] * len(train_data)
-                        #print(cur_ELO, ELO, b_elo)
                     train_data['Game-ID'] = ''.join(random.choices(ascii_uppercase + digits, k=random.randint(15, 15)))
                     train_data['Date'] = [datetime.now()] * len(train_data)
                     g_log = pd.concat([g_log, train_data], ignore_index=True)
