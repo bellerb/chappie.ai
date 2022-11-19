@@ -31,3 +31,4 @@ To get a better understanding of why the code is written this way check out my d
 
 * https://medium.com/@bellerb/playing-chess-with-a-generalized-ai-b83d64ac71fe
 * https://medium.com/@bellerb/playing-chess-with-offline-reinforcement-learning-411edc5efd5f
+* https://medium.com/@bellerb/retrieval-transformer-enhanced-reinforcement-learning-24509e97c4c6
