@@ -1,6 +1,6 @@
 __pycache__/
-notebooks/
-skills/chess/data/models/
-skills/chess/data/archive/
+/notebooks
+/skills/chess/data/models
+/skills/chess/data/archive
 .json
 .csv

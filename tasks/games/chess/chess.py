@@ -204,28 +204,30 @@ class Chess:
         np = self.board_2_array(next_pos)
         if self.valid_move(cp, np) is True:
             part = self.board[cp[1]][cp[0]]
+            self.log_move(part, cur_pos, next_pos, cp, np) 
+            #Enpassant rule
             if np == self.en_passant and (part == 1 or part == -1):
                 self.board[self.en_passant[1]-(self.p_move*(-1))][self.en_passant[0]] = 0
-            self.log_move(part, cur_pos, next_pos, cp, np)
             self.prev_move = self.board
             if (part == 1 and np[1] == 4) or (part == -1 and np[1] == 3):
                 self.en_passant = (np[0], np[1]+1) if part == 1 else (np[0], np[1]-1)
-            elif part == 6*self.p_move and np[0]-cp[0] == 2:
-                self.board[np[1]][np[0]-1] = 4*self.p_move
+            elif part == 6 * self.p_move and np[0] - cp[0] == 2:
+                self.board[np[1]][np[0]-1] = 4 * self.p_move
                 self.board[np[1]][np[0]+1] = 0
-            elif part == 6*self.p_move and np[0]-cp[0] == -2:
-                self.board[np[1]][np[0]+1] = 4*self.p_move
+            elif part == 6 * self.p_move and np[0] - cp[0] == -2:
+                self.board[np[1]][np[0]+1] = 4 * self.p_move
                 self.board[np[1]][np[0]-2] = 0
             else:
                 self.en_passant = None
-            if part == 6*self.p_move:
+            #Turn off castling for bishop
+            if part == 6 * self.p_move:
                 if self.p_move == 1:
                     self.castling[0] = 0
                     self.castling[1] = 0
                 else:
                     self.castling[2] = 0
                     self.castling[3] = 0
-            elif part == 4*self.p_move:
+            elif part == 4 * self.p_move:
                 if self.p_move == 1:
                     if cp == (0, 7):
                         self.castling[1] = 0
@@ -236,8 +238,10 @@ class Chess:
                         self.castling[3] = 0
                     else:
                         self.castling[2] = 0
+            #Update peices on board
             self.board[cp[1]][cp[0]] = 0
             self.board[np[1]][np[0]] = part
+            #Save game hash in hashtable
             hash = self.EPD_hash()
             if hash in self.EPD_table:
                 self.EPD_table[hash] += 1
@@ -254,14 +258,23 @@ class Chess:
         Description: determine if player move is valid game move
         Output: boolean representing the state of the player move
         """
-        if cur_pos != None and next_pos != None:
+        if cur_pos is not None and next_pos is not None:
             part = self.board[cur_pos[1]][cur_pos[0]]
             if part * self.p_move > 0 and part != 0:
                 p_name = self.parts[int(part) if part > 0 else int(part)*(-1)] #Get name of part
                 v_moves = getattr(Chess, p_name).movement(self, self.p_move, cur_pos, capture=True)
                 if len(self.log) > 0 and '+' in self.log[-1]:
-                    v_moves = [m for m in v_moves if cur_pos in self.c_escape and m in self.c_escape[cur_pos]]
+                    v_moves = [m for m in v_moves if cur_pos in self.c_escape and m in self.c_escape[cur_pos]] #Filter for can escape moves only if in check
                 if next_pos in v_moves:
+                    #Make sure v_move is not in checkmate
+                    board_hold = deepcopy(self.board)
+                    self.board[cur_pos[1]][cur_pos[0]] = 0
+                    self.board[next_pos[1]][next_pos[0]] = part
+                    moves = self.possible_board_moves(capture=True)
+                    check_mate =  self.is_checkmate(moves, player = self.p_move * -1)
+                    self.board = board_hold
+                    if (self.p_move == 1 and check_mate == [1,0,0]) or check_mate == [0,0,1]:
+                        return False
                     return True
         return False
 
@@ -277,28 +290,31 @@ class Chess:
                 if part != 0:
                     p_name = self.parts[int(part) if part > 0 else int(part)*(-1)] #Get name of part
                     p_colour = 1 if part > 0 else -1
-                    v_moves = getattr(Chess, p_name).movement(self, p_colour, [x, y], capture=capture)
+                    v_moves = getattr(Chess, p_name).movement(self, p_colour, [x, y], capture = capture)
+                    #print('PART',(x,y), part)
                     if len(self.log) > 0 and '+' in self.log[-1]:
-                        v_moves = [m for m in v_moves if (x, y) in self.c_escape and m in self.c_escape[(x, y)]]
+                        v_moves = [m for m in v_moves if (x, y) in self.c_escape and m in self.c_escape[(x, y)]] #Filter for can escape moves only if in check
                     moves[f'{str(self.x[x]).upper() if p_colour > 0 else str(self.x[x]).lower()}{self.y[y]}'] = v_moves
         return moves
 
-    def is_checkmate(self, moves):
+    def is_checkmate(self, moves, player = None):
         """
         Input: moves - dictionary containing all possible moves for current game state
-               check - boolean representing if check has been found or not (Default=False) [OPTIONAL]
+               player - integer either -1 or 1 representing the player you want to assess if their in check (Default=None) [OPTIONAL]
         Description: determine if the current game state results in a check mate or not
         Output: list representing current state of the game
         """
-        self.c_escape = {}
+        if player is None: 
+            player = self.p_move
+            self.c_escape = {}
         k_pos = () #King position
         p_blocks = [] #Possible blocks
         u_moves = {} #User potential moves
         #Sort all possible moves
         for p, a in moves.items():
             pos = self.board_2_array(p)
-            if (str(p[0]).isupper() and self.p_move == -1) or (str(p[0]).islower() and self.p_move == 1):
-                if self.board[pos[1]][pos[0]] == self.King().value * (self.p_move*(-1)):
+            if (str(p[0]).isupper() and player == -1) or (str(p[0]).islower() and player == 1):
+                if self.board[pos[1]][pos[0]] == self.King().value * (player * (-1)):
                     k_pos = (pos, a)
                 else:
                     for m in a:
@@ -313,8 +329,8 @@ class Chess:
             return [0, 0, 0]
         elif len(k_pos) == 0:
             for y, row in enumerate(self.board):
-                if self.King().value * (self.p_move*(-1)) in row:
-                    k_pos = ((row.index(self.King().value*(self.p_move*(-1))), y), [])
+                if self.King().value * (player * (-1)) in row:
+                    k_pos = ((row.index(self.King().value * (player * (-1))), y), [])
                     break
         if len(k_pos) > 0 and k_pos[0] in p_moves:
             for m in p_blocks:
@@ -347,16 +363,16 @@ class Chess:
                             self.c_escape[k_pos[0]] = [m]
                         #return [0, 0, 0]
             if len(self.c_escape) > 0:
-                self.log[-1] += '+' #Check
+                if len(self.log) > 0: self.log[-1] += '+' #Check
                 return [0, 0, 0]
-            elif self.p_move == -1:
-                self.log[-1] += '#'
+            elif player == -1:
+                if len(self.log) > 0: self.log[-1] += '#'
                 return [0, 0, 1] #Black wins
             else:
-                self.log[-1] += '#'
+                if len(self.log) > 0: self.log[-1] += '#'
                 return [1, 0, 0] #White wins
         else:
-            return [1, 0, 0] if self.p_move == 1 else [0, 0, 1]
+            return [1, 0, 0] if player == 1 else [0, 0, 1]
 
     def pawn_promotion(self, n_part=None):
         """
@@ -515,6 +531,7 @@ class Chess:
         """
         w_king = False
         b_king = False
+        #Check if player is missing it's king
         for y, row in enumerate(self.board):
             for x, peice in enumerate(row):
                 if self.board[y][x] == self.King().value * (-1):
@@ -527,6 +544,7 @@ class Chess:
             return [0, 0, 1]
         elif b_king == False:
             return [1, 0, 0]
+        #Find possible board moves
         moves = self.possible_board_moves(capture=True)
         check_mate = self.is_checkmate(moves)
         hash = self.EPD_hash()
@@ -860,7 +878,8 @@ class Chess:
 
 if __name__ == '__main__':
     #chess_game = Chess(EPD='4kb2/rpp1p3/6p1/6Np/3Q1B2/4P2b/PPP2PPP/RN1R2K1 w - -')
-    chess_game = Chess(EPD='1b4k1/Q7/p2np1/P1P2p2/1P3P2/1R5R/q6P/5rK1 b - -')
+    #chess_game = Chess(EPD='1b4k1/Q7/p2np1/P1P2p2/1P3P2/1R5R/q6P/5rK1 b - -')
+    chess_game = Chess(EPD='rn3Nnr/1b2p1pp/p7/R1pP1pk1/1PP5/1P2P3/1B2BPPP/1N1QK2R b K -') #g5-->h5 @ e2-->h5
     #chess_game = Chess()
     while True:
         if chess_game.p_move == 1:

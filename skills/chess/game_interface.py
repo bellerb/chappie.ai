@@ -32,7 +32,8 @@ class chess:
             if len(moves) > 0 and ((cur[0].isupper() and chess_game.p_move == 1) or (cur[0].islower() and chess_game.p_move == -1)):
                 cur_pos = chess_game.board_2_array(cur)
                 for next in moves:
-                    legal[cur_pos[1]][cur_pos[0]][next[1]][next[0]] = 1.
+                    if chess_game.valid_move(cur_pos, next):
+                        legal[cur_pos[1]][cur_pos[0]][next[1]][next[0]] = 1.
         return legal.flatten()
 
     def play_game(
@@ -77,6 +78,8 @@ class chess:
             chess_game = deepcopy(Chess(EPD=EPD)) #'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
         while True:
             for i, p in enumerate(players):
+                legal = self.legal_moves(chess_game) #Filter legal moves for inital state
+                legal[legal == 0] = float('-inf')
                 while True:
                     if str(p).lower() in human_code and len(log) < len(players):
                         a_players.append('human')
@@ -105,8 +108,6 @@ class chess:
                         b_a = np.where(a_map == 1)[0][0]
                     else:
                         t1 = datetime.now()
-                        legal = self.legal_moves(chess_game) #Filter legal moves for inital state
-                        legal[legal == 0] = float('-inf')
                         probs, v, r = a_players[i].choose_action(enc_state, legal_moves = legal)
                         max_prob = max(probs)
                         if SILENT == False:
@@ -127,9 +128,9 @@ class chess:
                         cur = f'{chess_game.x[a_index[1]]}{chess_game.y[a_index[0]]}'
                         next = f'{chess_game.x[a_index[3]]}{chess_game.y[a_index[2]]}'
                     valid = False
-                    if chess_game.move(cur, next) == False:
-                        if SILENT == False or str(p).lower() in human_code:
-                            print('Invalid move')
+                    if chess_game.move(cur, next) is False:
+                        if SILENT is False or str(p).lower() in human_code:
+                            print('Invalid move', SILENT == False, str(p).lower() in human_code)
                     else:
                         valid = True
                         if plumbing.move_count > 1:
