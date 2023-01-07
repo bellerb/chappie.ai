@@ -4,3 +4,4 @@ __pycache__/
 /skills/chess/data/archive
 .json
 .csv
+rest-api-data.json

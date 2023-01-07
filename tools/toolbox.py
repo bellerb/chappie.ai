@@ -14,12 +14,13 @@ from shutil import copyfile
 from os.path import exists, isfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
+
 class ToolBox:
     """
     The ToolBox is a class containing miscellaneous functions used throughout the agent
     """
 
-    def read_n_from_bottom_csv(self, file_name, n, headers = None):
+    def read_n_from_bottom_csv(self, file_name, n, headers=None):
         """
         Input: file_name - string representing the name of the file
                n - integer representing the amount of rows to get from the bottom
@@ -31,13 +32,13 @@ class ToolBox:
             q = deque(f, n)
         if headers is not None:
             return pd.read_csv(
-                StringIO('\n'.join(q)), 
-                names = headers
+                StringIO('\n'.join(q)),
+                names=headers
             )
         else:
             return pd.read_csv(
-                StringIO('\n'.join(q)), 
-                header = None
+                StringIO('\n'.join(q)),
+                header=None
             )
 
     def convert_token_2_embedding(self, t_db, representation, backbone):
@@ -52,19 +53,20 @@ class ToolBox:
         e_db = []
         with tqdm(total=len(t_db), desc='Embedding DB') as pbar:
             for i, row in t_db.iterrows():
-                hold = torch.tensor(row[headers].values).to(torch.long).reshape(1, len(headers))
+                hold = torch.tensor(row[headers].values).to(
+                    torch.long).reshape(1, len(headers))
                 hold = representation(hold)
                 hold = backbone(hold, torch.zeros(1, 1).to(torch.long))
                 e_db.append({
-                    'encoding':hold.tolist(),
-                    'state':row[headers].tolist()
+                    'encoding': hold.tolist(),
+                    'state': row[headers].tolist()
                 })
                 pbar.update(1)
         del hold
         del t_db
         return pd.DataFrame(e_db)
 
-    def build_embedding_db(self, representation, backbone, f_name = None, s_header = 'state'):
+    def build_embedding_db(self, representation, backbone, f_name=None, s_header='state'):
         """
         Input: representation - model used to create game state representations
                backbone - model used as the backbone of our multi task model
@@ -79,12 +81,13 @@ class ToolBox:
         else:
             t_db = None
         if t_db is not None:
-            e_db = self.convert_token_2_embedding(t_db, representation, backbone)
+            e_db = self.convert_token_2_embedding(
+                t_db, representation, backbone)
         else:
             e_db = None
         return e_db
 
-    def get_kNN(self, chunks, e_db, k = 2, header = 'encoding'):
+    def get_kNN(self, chunks, e_db, k=2, header='encoding'):
         """
         Input: chunks - tensor containing initial data
                 e_db - dataframe containing embeddings
@@ -93,29 +96,32 @@ class ToolBox:
         Description: find k-nearest-neighbours of input tensor
         Output: tensor containing the k-nearest-neighbours of input tensor
         """
-        e_db = torch.squeeze(torch.tensor(np.concatenate( e_db[header], axis=0 )))
+        e_db = torch.squeeze(torch.tensor(
+            np.concatenate(e_db[header], axis=0)))
         neighbours = torch.tensor([])
         for i, chunk in enumerate(chunks):
             neighbours = torch.cat(
                 [
-                    neighbours, 
+                    neighbours,
                     e_db[
                         torch.linalg.matrix_norm(
-                            chunk - e_db[:, chunk.size(0) * i : chunk.size(0) * (i + 1)] #Compare slice with chunk
-                        ).topk(k, largest = False).indices #Index of k nearest neighbours
+                            # Compare slice with chunk
+                            chunk - \
+                            e_db[:, chunk.size(0) * i: chunk.size(0) * (i + 1)]
+                        ).topk(k, largest=False).indices  # Index of k nearest neighbours
                     ][None, :, :]
                 ]
             )
         return neighbours
 
-    def multi_process(self, func, workers = None):
+    def multi_process(self, func, workers=None):
         """
         Input: func - list of dicitonary's containing the functions you want to run in parallel
         Description: run multiple funcitons in parallel
         Output: dictionary containing the output from all the supplied functions
         """
         data = {}
-        with ProcessPoolExecutor(max_workers = workers) as ex:
+        with ProcessPoolExecutor(max_workers=workers) as ex:
             future_func = {}
             for f in func:
                 if isinstance(f['args'], tuple) or isinstance(f['args'], list):
@@ -126,14 +132,14 @@ class ToolBox:
                 data[future_func[future]] = future.result()
         return data
 
-    def multi_thread(self, func, workers = None):
+    def multi_thread(self, func, workers=None):
         """
         Input: func - list of dicitonary's containing the functions you want to run in parallel
         Description: run multiple funcitons in parallel
         Output: dictionary containing the output from all the supplied functions
         """
         data = {}
-        with ThreadPoolExecutor(max_workers = workers) as ex:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
             future_func = {}
             for f in func:
                 if isinstance(f['args'], tuple) or isinstance(f['args'], list):
@@ -153,12 +159,12 @@ class ToolBox:
         """
         if exists(p1):
             if exists(p2) is False:
-                makedirs(p2) #Create folder
+                makedirs(p2)  # Create folder
             for i, m in enumerate(listdir(p1)):
                 copyfile(
                     f"{p1}/{m}",
                     f"{p2}/{m}"
-                ) #Overwrite active model with new model
+                )  # Overwrite active model with new model
 
     def give_options(self, o_bank):
         """
@@ -171,12 +177,12 @@ class ToolBox:
             u_in = input(''.join(f'* {o}\n' for o in o_bank) + '\n')
             for i, o in enumerate(o_bank):
                 o_hold = str(o).lower().split(' ')
-                if str(u_in).lower() == str(o_hold[0]).lower() or str(u_in).lower() == str(o_hold[0]).lower()+' '+str(o_hold[1]).lower() or str(u_in).lower() == str(o_hold[-1]).replace('(','').replace(')','').lower():
+                if str(u_in).lower() == str(o_hold[0]).lower() or str(u_in).lower() == str(o_hold[0]).lower()+' '+str(o_hold[1]).lower() or str(u_in).lower() == str(o_hold[-1]).replace('(', '').replace(')', '').lower():
                     choice = i
                     break
             if choice == -1:
                 print(
-'''
+                    '''
 -------------------------------------------------
     Invalid option, plase select an option.
 -------------------------------------------------
@@ -186,7 +192,7 @@ class ToolBox:
                 break
         return choice
 
-    def update_ELO(self, p1, p2, k = 32, tie = False):
+    def update_ELO(self, p1, p2, k=32, tie=False):
         """
         Input: p1 - float representing the winning players current ELO
                p2 - float representing the loosing players current ELO

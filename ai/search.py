@@ -6,14 +6,16 @@ import torch
 from numpy import isnan
 from numpy.random import dirichlet
 from einops import rearrange
-#import hashlib
+# import hashlib
 
 from tools.toolbox import ToolBox
+
 
 class MCTS:
     """
     Monte Carlo Tree Search algorithm used to search game tree for the best move
     """
+
     def __init__(
         self,
         backbone,
@@ -21,15 +23,15 @@ class MCTS:
         policy,
         state,
         reward,
-        Cca = None,
-        action_space = 4096,
-        c1 = 1.25,
-        c2 = 19652,
-        d_a = .3,
-        e_f = .25,
-        g_d = 1.,
-        single_player = False,
-        max_depth = float('inf')
+        Cca=None,
+        action_space=4096,
+        c1=1.25,
+        c2=19652,
+        d_a=.3,
+        e_f=.25,
+        g_d=1.,
+        single_player=False,
+        max_depth=float('inf')
     ):
         """
         Input: prediction - NN used to predict p, v values
@@ -43,41 +45,43 @@ class MCTS:
         Description: MCTS initail variables
         Output: None
         """
-        self.tree = {} #Game tree
-        #self.tree = Manager().dict()
-        self.l = 0 #Last node depth
-        self.action_space = action_space #Amount of possible actions
-        self.max_depth = max_depth #Max allowable depth
-        self.c1 = c1 #Exploration hyper parameter 1
-        self.c2 = c2 #Exploration hyper parameter 2
-        self.d_a = d_a #Dirichlet alpha
-        self.e_f = e_f #Exploration fraction
-        self.g_d = g_d #Gamma discount
-        self.Q_max = 1 #Max value
-        self.Q_min = -1 #Min value
-        self.g = backbone #Model used for backbone
-        self.v = value #Model used for value
-        self.p = policy #Model used for policy
-        self.s = state #Model used for state
-        self.r = reward #Model used for reward
-        self.Cca = Cca #Model used for chunked cross-attention
-        self.single_player = single_player #Control for if the task is single player or not
+        self.tree = {}  # Game tree
+        # self.tree = Manager().dict()
+        self.l = 0  # Last node depth
+        self.action_space = action_space  # Amount of possible actions
+        self.max_depth = max_depth  # Max allowable depth
+        self.c1 = c1  # Exploration hyper parameter 1
+        self.c2 = c2  # Exploration hyper parameter 2
+        self.d_a = d_a  # Dirichlet alpha
+        self.e_f = e_f  # Exploration fraction
+        self.g_d = g_d  # Gamma discount
+        self.Q_max = 1  # Max value
+        self.Q_min = -1  # Min value
+        self.g = backbone  # Model used for backbone
+        self.v = value  # Model used for value
+        self.p = policy  # Model used for policy
+        self.s = state  # Model used for state
+        self.r = reward  # Model used for reward
+        self.Cca = Cca  # Model used for chunked cross-attention
+        # Control for if the task is single player or not
+        self.single_player = single_player
 
     class Node:
         """
         Node for each state in the game tree
         """
+
         def __init__(self):
             """
             Input: None
             Description: Node initail variables
             Output: None
             """
-            self.N = 0 #Visits
-            self.Q = 0 #Value
-            self.R = 0 #Reward
-            self.S = None #State
-            self.P = None #Policy
+            self.N = 0  # Visits
+            self.Q = 0  # Value
+            self.R = 0  # Reward
+            self.S = None  # State
+            self.P = None  # Policy
 
     def state_hash(self, s):
         """
@@ -85,7 +89,7 @@ class MCTS:
         Description: generate unique hash of the supplied hidden state
         Output: integer representing unique hash of the supplied hidden state
         """
-        #result = str(int(hashlib.md5(str(s).encode('utf-8')).hexdigest(), 16))
+        # result = str(int(hashlib.md5(str(s).encode('utf-8')).hexdigest(), 16))
         result = hash(str(s))
         return result
 
@@ -104,20 +108,25 @@ class MCTS:
         Description: return best action state using polynomial upper confidence trees
         Output: list containing pUCT values for all acitons
         """
-        p_visits = sum([self.tree[(s, b)].N for b in range(self.action_space)]) #Sum of all potential nodes
+        p_visits = sum([self.tree[(s, b)].N for b in range(
+            self.action_space)])  # Sum of all potential nodes
         u_bank = {}
         for a in range(self.action_space):
-            U = self.tree[(s, a)].P * ((p_visits**(0.5))/(1+self.tree[(s, a)].N)) #First part of exploration
+            # First part of exploration
+            U = self.tree[(s, a)].P * ((p_visits**(0.5)) /
+                                       (1+self.tree[(s, a)].N))
             if isnan(U):
                 continue
-            U *= self.c1 + (math.log((p_visits + (self.action_space * self.c2) + self.action_space) / self.c2)) #Second part of exploration
-            Q_n = (self.tree[(s, a)].Q - self.Q_min) / (self.Q_max - self.Q_min) #Normalized value
+            U *= self.c1 + (math.log((p_visits + (self.action_space * self.c2) +
+                            self.action_space) / self.c2))  # Second part of exploration
+            Q_n = (self.tree[(s, a)].Q - self.Q_min) / \
+                (self.Q_max - self.Q_min)  # Normalized value
             u_bank[a] = Q_n + U
         m_u = max(u_bank.values())
-        a_bank = [k for k,v in u_bank.items() if v == m_u]
+        a_bank = [k for k, v in u_bank.items() if v == m_u]
         return random.choice(a_bank)
 
-    def search(self, s, e_db = None, a = None):
+    def search(self, s, e_db=None, a=None):
         """
         Input: s - tensor representing hidden state of task
                a - integer representing which action is being performed (default = None) [OPTIONAL]
@@ -128,31 +137,35 @@ class MCTS:
             a_hash = deepcopy(a.reshape(1).item())
         else:
             a_hash = None
-        s_hash = self.state_hash(s) #Create hash of state [sk-1] for game tree
+        # Create hash of state [sk-1] for game tree
+        s_hash = self.state_hash(s)
         if (s_hash, a_hash) not in self.tree:
-            self.tree[(s_hash, a_hash)] = self.Node() #Initialize new game tree node
+            # Initialize new game tree node
+            self.tree[(s_hash, a_hash)] = self.Node()
         if a is not None and self.tree[(s_hash, a_hash)].S is None:
             with torch.no_grad():
-                d_k = self.g(s, a + 1) #backbone function
-                r_k = self.r(d_k) #reward function
-                s_k = self.s(d_k) #next state function
+                d_k = self.g(s, a + 1)  # backbone function
+                r_k = self.r(d_k)  # reward function
+                s_k = self.s(d_k)  # next state function
             s = s_k.reshape(s.size())
             self.tree[(s_hash, a_hash)].S = s
             self.tree[(s_hash, a_hash)].R = r_k.reshape(1).item()
         elif a is not None and self.tree[(s_hash, a_hash)].S is not None:
             s = self.tree[(s_hash, a_hash)].S
-        sk_hash = self.state_hash(s) #Create hash of state [sk] for game tree
+        sk_hash = self.state_hash(s)  # Create hash of state [sk] for game tree
         if self.tree[(s_hash, a_hash)].N == 0:
-            #EXPANSION ---
-            self.expand_tree(s, s_hash, a_hash, sk_hash, noise = False)
+            # EXPANSION ---
+            self.expand_tree(s, s_hash, a_hash, sk_hash, noise=False)
         elif self.l < self.max_depth:
-            a_k = torch.tensor(self.pUCT(sk_hash)) #Find best action to perform @ [sk]
-            a_k = a_k.reshape((1,1))
+            # Find best action to perform @ [sk]
+            a_k = torch.tensor(self.pUCT(sk_hash))
+            a_k = a_k.reshape((1, 1))
             self.l += 1
-            #BACKUP ---
-            v_1  = self.search(s, a = a_k, e_db = e_db) #Go level deeper
+            # BACKUP ---
+            v_1 = self.search(s, a=a_k, e_db=e_db)  # Go level deeper
             G = self.tree[(s_hash, a_hash)].R + (self.g_d * v_1)
-            self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1) #Updated value
+            self.tree[(s_hash, a_hash)].Q = ((self.tree[(s_hash, a_hash)].N * self.tree[(
+                s_hash, a_hash)].Q) + G) / (self.tree[(s_hash, a_hash)].N + 1)  # Updated value
         if self.tree[(s_hash, a_hash)].Q < self.Q_min:
             self.Q_min = self.tree[(s_hash, a_hash)].Q
         if self.tree[(s_hash, a_hash)].Q > self.Q_max:
@@ -161,7 +174,7 @@ class MCTS:
         self.tree[(s_hash, a_hash)].N += 1
         return self.tree[(s_hash, a_hash)].Q if self.single_player is True else -self.tree[(s_hash, a_hash)].Q
 
-    def expand_tree(self, s, s_hash, a_hash, sk_hash = None, mask = None, noise = False):
+    def expand_tree(self, s, s_hash, a_hash, sk_hash=None, mask=None, noise=False):
         """
         Input: s - tensor representing hidden state of task
                s_hash - string representing the state hash
@@ -175,18 +188,18 @@ class MCTS:
         if sk_hash is None:
             sk_hash = s_hash
         with torch.no_grad():
-            v_k = self.v(s) #value function
-            p = self.p(s) #policy function
-        #ADD NOISE TO SEARCH
+            v_k = self.v(s)  # value function
+            p = self.p(s)  # policy function
+        # ADD NOISE TO SEARCH
         if noise is True:
-            p = self.dirichlet_noise(p) #Add dirichlet noise to p @ s0
+            p = self.dirichlet_noise(p)  # Add dirichlet noise to p @ s0
         else:
             p = rearrange(p, 'z y x -> z (y x)')
-        #MASK LEGAL MOVES ON FIRST SIM
+        # MASK LEGAL MOVES ON FIRST SIM
         if mask is not None:
             for i, m in enumerate(mask):
                 p[0][i] *= m
-        #UPDATE NODE VALUES
+        # UPDATE NODE VALUES
         self.tree[(s_hash, a_hash)].Q = v_k.reshape(1).item()
         for a_k, p_a in enumerate(p.reshape(self.action_space)):
             if (sk_hash, a_k) not in self.tree:
