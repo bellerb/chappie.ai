@@ -1,18 +1,23 @@
 import os
 import json
+import random
 import numpy as np
 from copy import deepcopy
 from flask import Flask, jsonify
 from datetime import datetime
 
+from ai.bot import Agent
 from tasks.games.chess.chess import Chess
 from skills.chess.game_plumbing import Plumbing
+from skills.chess.game_interface import chess
 
 FILE_NAME = "rest-api-data.json"
 
 app = Flask(__name__)
 game = Chess()
 plumbing = Plumbing()
+game_interface = chess()
+agent = Agent(param_name='skills/chess/data/models/test_v15/parameters.json')
 
 
 @app.route('/')
@@ -62,12 +67,7 @@ def chess_move_piece(cur, next):
         state = game.is_end()
         if state == [0, 0, 0] and game.check_state(game.EPD_hash()) == 'PP':
             game.pawn_promotion()
-        # Log game
-        if os.path.isfile(FILE_NAME):
-            with open(FILE_NAME, 'r') as json_file:
-                game_data = json.load(json_file)
-        else:
-            game_data = {'LOG': []}
+        # Process data
         a_map = np.zeros((8, 8, 8, 8))
         a_map[game.y.index(cur[1])][game.x.index(
             cur[0].lower())][game.y.index(next[1])][game.x.index(next[0].lower())] = 1
@@ -76,11 +76,71 @@ def chess_move_piece(cur, next):
         enc_state = plumbing.encode_state(game)
         player = deepcopy(game.p_move)
         game.p_move *= -1
+        # Log move
+        if os.path.isfile(FILE_NAME):
+            with open(FILE_NAME, 'r') as json_file:
+                game_data = json.load(json_file)
+        else:
+            game_data = {'LOG': []}
         game_data['EPD'] = game.EPD_hash()
         game_data['LOG'].append({
             **{f'state{i}': float(s) for i, s in enumerate(enc_state[0])},
             **{f'prob{x}': 1 if x == ((cur[0]+(cur[1]*8))*64)+(next[0]+(next[1]*8)) else 0 for x in range(4096)},
             **{'action': int(b_a)},
+            'player': player
+        })
+        with open(FILE_NAME, 'w') as json_file:
+            json.dump(game_data, json_file, indent=4)
+    else:
+        state = game.is_end()
+        print("INVALID MOVE")
+    return jsonify({
+        'board': game.board,
+        'p_move': game.p_move,
+        'state': state,
+        'valid_moves': game.possible_board_moves()
+    })
+
+
+@app.route('/chess/ai-move', methods=['GET'])
+def chess_ai_move():
+    t1 = datetime.now()
+    enc_state = plumbing.encode_state(game)
+    legal = game_interface.legal_moves(game)
+    legal[legal == 0] = float('-inf')
+    probs, _, _ = agent.choose_action(
+        enc_state, legal_moves=legal)
+    max_prob = max(probs)
+    a_bank = [j for j, v in enumerate(
+        probs) if v == max_prob]
+    b_a = random.choice(a_bank)
+    print(b_a)
+    a_map = np.zeros(4096)
+    a_map[b_a] = 1
+    a_map = a_map.reshape((8, 8, 8, 8))
+    a_index = [(cy, cx, ny, nx) for cy, cx, ny,
+               nx in zip(*np.where(a_map == 1))][0]
+    cur = f'{game.x[a_index[1]]}{game.y[a_index[0]]}'
+    next = f'{game.x[a_index[3]]}{game.y[a_index[2]]}'
+    if game.move(cur, next):
+        state = game.is_end()
+        # Process data
+        if plumbing.move_count > 1:
+            plumbing.move_que = enc_state.tolist()[0]
+        enc_state = plumbing.encode_state(game)
+        player = deepcopy(game.p_move)
+        game.p_move *= -1
+        # Log move
+        if os.path.isfile(FILE_NAME):
+            with open(FILE_NAME, 'r') as json_file:
+                game_data = json.load(json_file)
+        else:
+            game_data = {'LOG': []}
+        game_data['EPD'] = game.EPD_hash()
+        game_data['LOG'].append({
+            **{f'state{i}': float(s) for i, s in enumerate(enc_state[0])},
+            **{f'prob{x}': p for x, p in enumerate(probs)},
+            **{'action': b_a, 'time': (datetime.now() - t1).total_seconds()},
             'player': player
         })
         with open(FILE_NAME, 'w') as json_file:
