@@ -1,3 +1,4 @@
+import heapq
 import os
 import json
 import random
@@ -110,10 +111,12 @@ def chess_ai_move():
     legal[legal == 0] = float('-inf')
     probs, _, _ = agent.choose_action(
         enc_state, legal_moves=legal)
-    max_prob = max(probs)
-    a_bank = [j for j, v in enumerate(
-        probs) if v == max_prob]
-    b_a = random.choice(a_bank)
+    # create a priority queue
+    a_bank = []
+    for j, prob in enumerate(probs):
+        # use -prob to sort in descending order
+        heapq.heappush(a_bank, (-prob, j))
+    _, b_a = heapq.heappop(a_bank)  # get the highest probability action
     print(b_a)
     a_map = np.zeros(4096)
     a_map[b_a] = 1
@@ -151,8 +154,6 @@ def chess_ai_move():
     return jsonify({
         'board': game.board,
         'p_move': game.p_move,
-        'state': state,
-        'valid_moves': game.possible_board_moves()
     })
 
 
