@@ -3,6 +3,8 @@
 )](#)
 [![Top Languages](https://img.shields.io/github/languages/top/bellerb/chappie.ai?style=flat-square
 )](#)
+[![Total Lines](https://img.shields.io/tokei/lines/github/bellerb/chappie.ai)](#)
+[![File Size](https://img.shields.io/github/languages/code-size/bellerb/chappie.ai)](#)
 
 ### Description
 The following is a program for a generalized bot you can interact with in your console written in python3. This bot has been designed as a general framework for performing a multitude of tasks.
