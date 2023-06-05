@@ -8,7 +8,7 @@ from numpy.random import dirichlet
 from einops import rearrange
 # import hashlib
 
-from tools.toolbox import ToolBox
+from ..tools.toolbox import ToolBox
 
 
 class MCTS:
@@ -114,7 +114,7 @@ class MCTS:
         for a in range(self.action_space):
             # First part of exploration
             U = self.tree[(s, a)].P * ((p_visits**(0.5)) /
-                                       (1+self.tree[(s, a)].N))
+                                       (1 + self.tree[(s, a)].N))
             if isnan(U):
                 continue
             U *= self.c1 + (math.log((p_visits + (self.action_space * self.c2) +

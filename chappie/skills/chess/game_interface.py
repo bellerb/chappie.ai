@@ -9,10 +9,10 @@ from shutil import copyfile, rmtree, copytree
 from datetime import datetime
 
 # from ai.bot import Agent
-from ai.bot import Agent
-from tasks.games.chess.chess import Chess
-from skills.chess.game_plumbing import Plumbing
-from tools.toolbox import ToolBox
+from ...ai.bot import Agent
+from ...tasks.games.chess.chess import Chess
+from .game_plumbing import Plumbing
+from ...tools.toolbox import ToolBox
 
 
 class chess:
@@ -156,7 +156,7 @@ class chess:
                         if a_players[i] == 'human':
                             log.append({
                                 **{f'state{i}': float(s) for i, s in enumerate(enc_state[0])},
-                                **{f'prob{x}': 1 if x == ((cur_pos[0]+(cur_pos[1]*8))*64)+(next_pos[0]+(next_pos[1]*8)) else 0 for x in range(4096)},
+                                **{f'prob{x}': 1 if x == ((cur_pos[0] + (cur_pos[1] * 8)) * 64) + (next_pos[0] + (next_pos[1] * 8)) else 0 for x in range(4096)},
                                 **{'action': b_a},
                                 'player': p
                             })

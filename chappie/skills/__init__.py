@@ -1,0 +1,1 @@
+from .chess import Chess

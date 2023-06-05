@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 from einops import rearrange
 
-from ai.search import MCTS
-from tools.toolbox import ToolBox
-from ai.model import Representation, Backbone, Head, ChunkedCrossAttention
+from .search import MCTS
+from ..tools.toolbox import ToolBox
+from .model import Representation, Backbone, Head, ChunkedCrossAttention
 
 
 class Agent:
@@ -384,7 +384,7 @@ class Agent:
                 self.total_loss['cca loss'] = 0.
             if encoder is True and epoch > full_count - 1:
                 data = data[data['Game-ID'] == data.iloc[-1]['Game-ID']]
-            with tqdm(total=int(len(data)/self.training_settings['bsz']) + 1, desc='Training Batch') as pbar:
+            with tqdm(total=int(len(data) / self.training_settings['bsz']) + 1, desc='Training Batch') as pbar:
                 for batch, i in enumerate(range(0, len(data), self.training_settings['bsz'])):
                     state, s_targets, p_targets, v_targets, r_targets, a_targets = self.get_batch(
                         data, i, self.training_settings['bsz'])  # Get batch data with the selected targets being masked
@@ -684,30 +684,30 @@ class Agent:
         s_headers = [h for h in source if s_h in h]
         p_headers = [h for h in source if p_h in h]
 
-        s = source[s_headers].iloc[x:x+y]
-        p = source[p_headers].iloc[x:x+y]
-        v = source[v_headers].iloc[x:x+y]
-        r = source[r_headers].iloc[x:x+y]
-        a = source[a_headers].iloc[x:x+y] + 1
+        s = source[s_headers].iloc[x:x + y]
+        p = source[p_headers].iloc[x:x + y]
+        v = source[v_headers].iloc[x:x + y]
+        r = source[r_headers].iloc[x:x + y]
+        a = source[a_headers].iloc[x:x + y] + 1
 
         a_0 = pd.DataFrame([{a_h: 0} for _ in range(len(a))])
 
-        s_1 = source[s_headers].shift(periods=-1, axis=0).iloc[x:x+y]
+        s_1 = source[s_headers].shift(periods=-1, axis=0).iloc[x:x + y]
         # s_1[f'{s_h}0'] = np.where(s_1[f'{s_h}0'] == 0., 1., 0.)
         if True in s_1.iloc[-1].isna().tolist():
             s_1.iloc[-1] = s.iloc[-1]
             # if self.single_player is False:
             # s_1[f'{s_h}0'].iloc[-1] = 0 if s_1[f'{s_h}0'].iloc[-1] == 1 else 1
 
-        p_1 = source[p_headers].shift(periods=-1, axis=0).iloc[x:x+y]
+        p_1 = source[p_headers].shift(periods=-1, axis=0).iloc[x:x + y]
         if True in p_1.iloc[-1].isna().tolist():
             p_1.iloc[-1] = p.iloc[-1]
 
-        v_1 = source[v_headers].shift(periods=-1, axis=0).iloc[x:x+y]
+        v_1 = source[v_headers].shift(periods=-1, axis=0).iloc[x:x + y]
         if True in v_1.iloc[-1].isna().tolist():
             v_1.iloc[-1] = v.iloc[-1]
 
-        r_1 = source[r_headers].shift(periods=-1, axis=0).iloc[x:x+y]
+        r_1 = source[r_headers].shift(periods=-1, axis=0).iloc[x:x + y]
         if True in r_1.iloc[-1].isna().tolist():
             r_1.iloc[-1] = r.iloc[-1]
 

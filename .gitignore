@@ -1,7 +1,10 @@
 __pycache__/
 /notebooks
-/skills/chess/data/models
-/skills/chess/data/archive
+/chappie/skills/chess/data/models
+/chappie/skills/chess/data/archive
 .json
 .csv
 rest-api-data.json
+/dist
+/chappie_ai.egg-info
+/build
