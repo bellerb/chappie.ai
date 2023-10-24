@@ -9,7 +9,7 @@ from copy import deepcopy
 class Plumbing():
     def __init__(
         self,
-        filename='skills/chess/data/token_bank.csv',
+        filename='data/token_bank.csv',
         move_count=5
     ):
         """

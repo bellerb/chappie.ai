@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import random
 import numpy as np
@@ -8,11 +9,13 @@ from string import ascii_uppercase, digits
 from shutil import copyfile, rmtree, copytree
 from datetime import datetime
 
-# from ai.bot import Agent
-from ...ai.bot import Agent
-from ...tasks.games.chess.chess import Chess
-from .game_plumbing import Plumbing
-from ...tools.toolbox import ToolBox
+# Import custom libraries
+from game import Chess, Plumbing
+
+# Import chappie framework
+sys.path.append("../../")
+from chappie.ai.bot import Agent
+from chappie.tools.toolbox import ToolBox
 
 
 class chess:
@@ -46,7 +49,7 @@ class chess:
         EPD=None,
         SILENT=True,
         players=[
-            'skills/chess/data/active_param.json',
+            'data/active_param.json',
             'human'
         ],
         tie_min=100,
@@ -59,7 +62,7 @@ class chess:
                train - boolean used as training control (Default = False) [OPTIONAL]
                EPD - string representing the EPD hash to load the board into (Default = None) [OPTIONAl]
                SILENT - boolean used for control of displaying stats or not (Default = True) [OPTIONAL]
-               players - list containing the player paramater files (Default = ['skills/chess/data/active_param.json', 'human'] [OPTIONAL]
+               players - list containing the player paramater files (Default = ['data/active_param.json', 'human'] [OPTIONAL]
                tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
                game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
         Description: play a game of chess
@@ -240,7 +243,7 @@ class chess:
         best_of=5,
         EPD=None,
         SILENT=True,
-        player='skills/chess/data/models/test',
+        player='data/models/test',
         tie_min=100,
         game_max=float('inf'),
         full_model=False
@@ -251,7 +254,7 @@ class chess:
                best_of = integer representing the amount of games to use in a round-robin (Default = 5) [OPTIONAL]
                EPD - string representing the EPD hash to load the board into (Default = None) [OPTIONAl]
                SILENT - boolean used for control of displaying stats or not (Default = True) [OPTIONAL]
-               players - list of player parameters (Default = [{'param':'skills/chess/data/new_param.json', 'train':True}] [OPTIONAL]
+               players - list of player parameters (Default = [{'param':'data/new_param.json', 'train':True}] [OPTIONAL]
                tie_min - integer representing the minimum amount of moves for an auto tie game to be possible (Default = 100) [OPTIONAL]
                game_max - integer representing the maximum amount of moves playable before triggering an auto tie (Default = inf) [OPTIONAL]
                full_model - boolean representing if the full model is being trained every exploration game or not (Default = False) [OPTIONAL]

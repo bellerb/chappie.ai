@@ -25,10 +25,10 @@ class Agent:
         Input: param_name - string representing the file that contains the models parameters
                train - boolean control for if the AI is in training mode or not (default = False) [OPTIONAL]
                game_num - amount of games that have been trained (default = 0) [OPTIONAL]
-        Description: Agent initail variables
+        Description: Agent initial variables
         Output: None
         """
-        # Initalize models
+        # Initialize models
         self.Device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
         if os.path.exists(param_name):
@@ -71,7 +71,7 @@ class Agent:
                 dropout=p_model['chunked_dropout'],
                 n=p_model['latent_size'][0],  # Sequence length
                 m=p_model['chunked_length'],  # Chunk length
-                k=p_model['neighbour_amt'],  # Amount of neighbours
+                k=p_model['neighbour_amt'],  # Amount of neighbors
                 r=p_model['latent_size'][0],  # Retrieval length
                 d=p_model['latent_size'][-1]  # Embedding size
             ).to(self.Device)
@@ -134,7 +134,7 @@ class Agent:
                 )
                 self.m_weights[m]['model'].load_state_dict(
                     checkpoint['state_dict'])
-        # Inialize search
+        # Initialize search
         if m_param['search']['max_depth'] is None:
             m_d = float('inf')
         else:
@@ -159,8 +159,8 @@ class Agent:
             self.noise = True
         else:
             self.noise = False
-        # Decay tempature with as more training games played to cause pUCT formula to become more exploitative
-        # Decay tempature using exponential decay formula
+        # Decay temperature with as more training games played to cause pUCT formula to become more exploitative
+        # Decay temperature using exponential decay formula
         self.T = 1 * ((1 - m_param['search']['T']) ** game_num)
         # Amount of moves to cache
         self.move_count = m_param['search']['move_cache']
@@ -221,12 +221,12 @@ class Agent:
                     self.m_weights['cca']['model'].m,
                     self.m_weights['cca']['model'].d
                 )[:self.m_weights['cca']['model'].l - 1]
-                neighbours = self.tools.get_kNN(
+                neighbors = self.tools.get_kNN(
                     chunks,
                     self.E_DB[~self.E_DB['state'].isin(state.float().tolist())]
                 )
                 d = self.m_weights['cca']['model'](
-                    d, neighbours)  # chunked cross-attention
+                    d, neighbors)  # chunked cross-attention
                 d = d.reshape(1, d.size(0), d.size(1))
         s_hash = self.MCTS.state_hash(d)
         self.MCTS.tree[(s_hash, None)] = self.MCTS.Node()
@@ -269,7 +269,7 @@ class Agent:
                gamma_header - string representing the header of the gamma decay setting
                m_header - string representing the model header (Default = 'model') [OPTIONAL]
                lr_header - string representing the learning rate header (Default ='lr') [OPTIONAL]
-        Description: initalizes a model for training purposes
+        Description: initializes a model for training purposes
         Output: None
         """
         self.__dict__[optimizer] = torch.optim.Adam(
@@ -344,7 +344,7 @@ class Agent:
         Input: data - dataframe containing training data
                folder -  string representing the folder to save the new weights in (Default = None) [OPTIONAL]
                encoder - boolean representing if you want to retrain the encoder models or not (Default = True) [OPTIONAL]
-               full_count - integer representing the amoun  t of epochs to do full model training for (Default = 1) [OPTIONAL]
+               full_count - integer representing the amount of epochs to do full model training for (Default = 1) [OPTIONAL]
         Description: Training of the models
         Output: dataframe containing the training log
         """
@@ -475,7 +475,7 @@ class Agent:
     def train_representation_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
         """
         Input: state - tensor representing the current state
-               a_targets - tensor representing the choosen actions
+               a_targets - tensor representing the chosen actions
                s_targets - tensor representing the next state head targets
                v_targets - tensor representing the value head targets
                p_targets - tensor representing the policy head targets
@@ -508,7 +508,7 @@ class Agent:
     def train_backbone_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
         """
         Input: state - tensor representing the current state
-               a_targets - tensor representing the choosen actions
+               a_targets - tensor representing the chosen actions
                s_targets - tensor representing the next state head targets
                v_targets - tensor representing the value head targets
                p_targets - tensor representing the policy head targets
@@ -544,7 +544,7 @@ class Agent:
     def train_cca_layer(self, state, a_targets, s_targets, v_targets, p_targets, r_targets):
         """
         Input: state - tensor representing the current state
-               a_targets - tensor representing the choosen actions
+               a_targets - tensor representing the chosen actions
                s_targets - tensor representing the next state head targets
                v_targets - tensor representing the value head targets
                p_targets - tensor representing the policy head targets

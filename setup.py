@@ -9,6 +9,8 @@ setup(
     long_description=open('README.md').read(),  # Read the README file
     long_description_content_type='text/markdown',
     packages=find_packages(),
+    exclude_package_data={
+        "": ["deploy.sh", "notebooks/*", "examples/*", ".vscode/*"]},
     install_requires=[
         "torch",
         "pandas",

@@ -5,23 +5,49 @@
 [![Total Lines](https://img.shields.io/tokei/lines/github/bellerb/chappie.ai)](#)
 [![File Size](https://img.shields.io/github/languages/code-size/bellerb/chappie.ai)](#)
 
-### Description
+## Description
 
 The following is framework for developing reinforcement learning (rl) agents. This bot has been designed as a general framework for performing a multitude of tasks with minimal teaching.
 
-# Installation Instructions
+## Folder structure
+
+The folder is layed out like the following.
+
+```
+.
+├──README.md
+├──LICENSE
+├──setup.py
+├──chappie
+├──examples
+├──notebooks
+```
+
+### Chappie
+
+In the chappie folder is our actual chappie framework. This is the code that is downloaded when you pip install the newly created package.
+
+### Examples
+
+In the examples folder we have examples of how to use the chappie framework. This folder is only included in our github repo and not in the actual package.
+
+### Notebooks
+
+In the notebooks folder we have a series of jupyter notebooks where ideas are flushed out. In these notebooks we go further in detail about each feature being built. This folder is only included in our github repo and not in the actual package.
+
+## Installation Instructions
 
 ```cmd
 pip install --upgrade chappie-ai
 ```
 
-# Import Instructions
+## Import Instructions
 
 ```python
 import chappie
 ```
 
-# Write Up
+## Write Up
 
 To get a better understanding of why the code is written this way check out my detailed write up:
 
